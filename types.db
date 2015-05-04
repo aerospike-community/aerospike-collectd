@@ -1,0 +1,6 @@
+counter          value:COUNTER:0:U
+count            value:GAUGE:0.0:U
+storage          bytes:GAUGE:0:U
+boolean          value:GAUGE:0:1
+percent          percent:GAUGE:0:100.1
+operation        value:DERIVE:0:U
