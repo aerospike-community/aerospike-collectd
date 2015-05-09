@@ -34,6 +34,9 @@ class AerospikePlugin(object):
         val.plugin_instance = plugin_instance
         val.type = type
         val.type_instance = instance
+        # HACK with this dummy dict in place JSON parsing works
+        # https://github.com/collectd/collectd/issues/716
+        val.meta={'0': True}
         val.values = [value, ]
         val.dispatch()
 
