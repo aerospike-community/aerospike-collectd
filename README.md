@@ -6,7 +6,10 @@ This package is in early development; backwards compatibility is not
 presently considered.
 
 # Install
+
+```
 sudo pip install -r requirements.txt
+```
 
 Highlights from collectd.conf:
 
