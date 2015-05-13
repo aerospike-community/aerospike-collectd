@@ -26,8 +26,9 @@ TypesDB "/opt/collectd-plugins/aerospike_types.db"
     Interactive false
     Import "aerospike_plugin"
     <Module aerospike_plugin>
-        Host "127.0.0.1"
-        Port "3000"
+        Host   "127.0.0.1"
+        Port   3000
+        Prefix "cluster_name"
     </Module>
 </Plugin>
 ```

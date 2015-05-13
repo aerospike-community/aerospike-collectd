@@ -11,6 +11,7 @@ class Data(object):
 class AerospikePlugin(object):
     def __init__(self):
         self.plugin_name = "aerospike"
+        self.prefix = None
         self.aerospike = Data()
         self.aerospike.host = "127.0.0.1"
         self.aerospike.port = 3000
@@ -19,11 +20,17 @@ class AerospikePlugin(object):
         self.node_id = None
         self.timeout = 2000
 
-    def submit(self, type, instance, value, namespace=None):
+    def submit(self, value_type, instance, value, namespace=None):
+        plugin_instance = []
+        if self.prefix:
+            plugin_instance.append(self.prefix)
+
+        plugin_instance.append(self.node_id)
+
         if namespace:
-            plugin_instance = "%s.%s"%(self.node_id, namespace)
-        else:
-            plugin_instance = self.node_id
+            plugin_instance.append(namespace)
+
+        plugin_instance = ".".join(plugin_instance)
 
         data = pprint.pformat((type, plugin_instance, instance
                                , value, namespace))
@@ -32,11 +39,11 @@ class AerospikePlugin(object):
         val = collectd.Values()
         val.plugin = self.plugin_name
         val.plugin_instance = plugin_instance
-        val.type = type
+        val.type = value_type
         val.type_instance = instance
         # HACK with this dummy dict in place JSON parsing works
         # https://github.com/collectd/collectd/issues/716
-        val.meta={'0': True}
+        val.meta = {'0': True}
         val.values = [value, ]
         val.dispatch()
 
@@ -59,27 +66,27 @@ class AerospikePlugin(object):
 
         for key, value in statistics.iteritems():
             if key in counters:
-                type = "counter"
+                value_type = "counter"
             elif key in counts:
-                type = "count"
+                value_type = "count"
             elif key in booleans:
-                type = "boolean"
+                value_type = "boolean"
                 value = value.lower()
                 if value == "false" or value == "no" or value == "0":
                     value = 0
                 else:
                     value = 1
             elif key in percents:
-                type = "percent"
+                value_type = "percent"
             elif key in storage:
-                type = "storage"
+                value_type = "storage"
             elif key in operations:
-                type = "operation"
+                value_type = "operation"
             else:
                 # not in any group, skip
                 continue
 
-            self.submit(type, key, value, namespace)
+            self.submit(value_type, key, value, namespace)
 
     def do_service_statistics(self, client, hosts):
         counters = set(["uptime",])
@@ -424,6 +431,8 @@ class AerospikePlugin(object):
                 self.aerospike.password = node.values[0]
             elif node.key == "Timeout":
                 self.timeout = int(node.values[0])
+            elif node.key == "Prefix":
+                self.prefix = node.values[0]
             else:
                 collectd.warning("%s: Unknown configuration key %s"%(
                     self.plugin_name
