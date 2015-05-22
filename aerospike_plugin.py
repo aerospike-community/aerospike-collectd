@@ -40,7 +40,7 @@ class AerospikePlugin(object):
         val.plugin = self.plugin_name
         val.plugin_instance = plugin_instance
         val.type = value_type
-        val.type_instance = instance
+        val.type_instance = instance.lower().replace('-', '_')
         # HACK with this dummy dict in place JSON parsing works
         # https://github.com/collectd/collectd/issues/716
         val.meta = {'0': True}
