@@ -388,14 +388,15 @@ class AerospikePlugin(object):
 
             # Don't need TPS column name
             columns.pop(0)
-            tps_name = "%s_TPS"%(hist_name)
+            tps_name = "%s_tps"%(hist_name)
             tps_value = row.pop(0)
 
             self.submit("count", tps_name, tps_value)
 
             while columns:
                 name = "%s_pct%s"%(hist_name, columns.pop(0))
-                value = row.pop(0) * 100
+                name = name.replace(">", "_gt_")
+                value = row.pop(0)
                 self.submit("percent", name, value)
 
     def get_all_statistics(self):
