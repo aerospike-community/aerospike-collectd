@@ -28,6 +28,7 @@ class AerospikePlugin(object):
         plugin_instance.append(self.node_id)
 
         if namespace:
+            plugin_instance.append("namespace")
             plugin_instance.append(namespace)
 
         plugin_instance = ".".join(plugin_instance)
