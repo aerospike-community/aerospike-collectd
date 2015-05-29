@@ -336,7 +336,8 @@ class AerospikePlugin(object):
         ])
 
         percents = set([
-            "free-pct-disk"
+            "available_pct"
+            , "free-pct-disk"
             , "free-pct-memory"
             , "nsup-cycle-sleep-pct"
         ])
