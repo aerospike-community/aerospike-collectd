@@ -48,9 +48,9 @@ class AerospikePlugin(object):
         val.values = [value, ]
         val.dispatch()
 
-    def process_statistics(self, statistics, counters=None, counts=None
+    def process_statistics(self, statistics, context, counters=None, counts=None
                            , storage=None, booleans=None, percents=None
-                           , operations=None, namespace=None):
+                           , operations=None, config=None, namespace=None):
 
         if counters is None:
             counters = set()
@@ -64,6 +64,8 @@ class AerospikePlugin(object):
             percents = set()
         if operations is None:
             operations = set()
+        if config is None:
+            config = set()
 
         for key, value in statistics.iteritems():
             if key in counters:
@@ -83,8 +85,22 @@ class AerospikePlugin(object):
                 value_type = "storage"
             elif key in operations:
                 value_type = "operation"
+            elif key in config:
+                continue
             else:
-                # not in any group, skip
+                try:
+                    float(value)
+                except ValueError:
+                    pass
+                else:
+                    # Log numeric values that aren't emitted
+                    if namespace:
+                        stat_name = "%s.%s.%s"%(context, namespace, key)
+                    else:
+                        stat_name = "%s.%s"%(context, key)
+
+                    collectd.info("Unused numeric stat: %s has value %s"%(
+                        stat_name, value))
                 continue
 
             self.submit(value_type, key, value, namespace)
@@ -117,8 +133,12 @@ class AerospikePlugin(object):
             , "record_refs"
             , "stat_evicted_objects_time"
             , "sub-records"
+            , "total-bytes-disk"
+            , "total-bytes-memory"
             , "tree_count"
             , "waiting_transactions"
+            , "query_long_queue_size"
+            , "query_short_queue_size"
         ])
 
         booleans = set([
@@ -286,14 +306,10 @@ class AerospikePlugin(object):
             , "write_prole"
         ])
 
-        unused = set([
-            "total-bytes-disk"
-            , "total-bytes-memory"
-        ])
-
         _, (_, statistics) = client.info("statistics", hosts=hosts).items()[0]
         statistics = info_to_dict(statistics)
         self.process_statistics(statistics
+                                , "service"
                                 , counters=counters
                                 , counts=counts
                                 , storage=storage
@@ -337,6 +353,7 @@ class AerospikePlugin(object):
 
         percents = set([
             "available_pct"
+            , "cache-read-pct"
             , "free-pct-disk"
             , "free-pct-memory"
             , "nsup-cycle-sleep-pct"
@@ -357,18 +374,47 @@ class AerospikePlugin(object):
             , "set-evicted-objects"
         ])
 
+        config = set([
+            "max-write-cache"
+            , "defrag-startup-minimum"
+            , "ldt-page-size"
+            , "high-water-memory-pct"
+            , "memory-size"
+            , "max-ttl"
+            , "filesize"
+            , "total-bytes-disk"
+            , "min-avail-pct"
+            , "fsync-max-sec"
+            , "total-bytes-memory"
+            , "default-ttl"
+            , "cold-start-evict-ttl"
+            , "defrag-sleep"
+            , "write-smoothing-period"
+            , "stop-writes-pct"
+            , "defrag-queue-min"
+            , "post-write-queue"
+            , "high-water-disk-pct"
+            , "writethreads"
+            , "writecache"
+            , "evict-tenths-pct"
+            , "defrag-lwm-pct"
+            , "flush-max-ms"
+        ])
+
         for namespace in namespaces:
             _, (_, statistics) = client.info("namespace/%s"%(namespace)
                                              , hosts=hosts).items()[0]
             statistics = info_to_dict(statistics)
 
             self.process_statistics(statistics
+                                    , "namespace"
                                     , counters=counters
                                     , counts=counts
                                     , storage=storage
                                     , booleans=booleans
                                     , percents=percents
                                     , operations=operations
+                                    , config=config
                                     , namespace=namespace)
 
     def do_latency_statistics(self, client, hosts):
