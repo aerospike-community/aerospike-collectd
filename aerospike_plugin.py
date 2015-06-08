@@ -305,7 +305,7 @@ class AerospikePlugin(object):
 
         try:
             _, (_, statistics) = client.info("statistics", hosts=hosts).items()[0]
-        except TimeoutError:
+        except (TimeoutError, ClientError):
             collectd.warning('WARNING: TimeoutError executing info("statistics")')
             meta_stats["timeouts"] += 1
         else:
@@ -409,7 +409,7 @@ class AerospikePlugin(object):
             try:
                 _, (_, statistics) = client.info(command
                                                  , hosts=hosts).items()[0]
-            except TimeoutError:
+            except (TimeoutError, ClientError):
                 collectd.warning('WARNING: TimeoutError executing info("%s")'%(command))
                 meta_stats["timeouts"] += 1
                 continue
@@ -430,7 +430,7 @@ class AerospikePlugin(object):
     def do_latency_statistics(self, meta_stats, client, hosts):
         try:
             _, (_, tdata) = client.info("latency:", hosts=hosts).items()[0]
-        except TimeoutError:
+        except (TimeoutError, ClientError):
             collectd.warning('WARNING: TimeoutError executing info("latency:")')
             meta_stats["timeouts"] += 1
             return
@@ -490,7 +490,7 @@ class AerospikePlugin(object):
             # Get this Nodes ID
             try:
                 _, (_, node_id) = client.info("node", hosts=hosts).items()[0]
-            except TimeoutError:
+            except (TimeoutError, ClientError):
                 collectd.warning('WARNING: TimeoutError executing info("node")')
                 meta_stats["timeouts"] += 1
             else:
@@ -501,7 +501,7 @@ class AerospikePlugin(object):
                 try:
                     _, (_, namespaces) = client.info("namespaces"
                                                      , hosts=hosts).items()[0]
-                except TimeoutError:
+                except (TimeoutError, ClientError):
                     collectd.warning('WARNING: TimeoutError executing info("namespaces")')
                     meta_stats["timeouts"] += 1
                 else:
