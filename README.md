@@ -37,7 +37,7 @@ TypesDB "/opt/collectd-plugins/aerospike_types.db"
 - Service Level Stats (`asinfo -v "statistics"`)
 - Namespace Stats (`asinfo -v "namespace/NAMESPACE_NAME"`)
 - Latency Stats (`asinfo -v "latency:"`)
+- Can use Aerospike Security accounts
 - (TODO) Configuration Stats (`asinfo -v "get-config:context=CONTEXT"`)
 - (TODO) XDR Stats (`asinfo -p 3004 -v "get-config:context=service"`)
-- (TODO) Security
 - (TODO) Optionally disable stats (DisableXDR true)
