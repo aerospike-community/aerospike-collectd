@@ -21,21 +21,18 @@ class AerospikePlugin(object):
         self.node_id = None
         self.timeout = 2000
 
-    def submit(self, value_type, instance, value, namespace=None):
+    def submit(self, value_type, instance, value, context):
         plugin_instance = []
         if self.prefix:
             plugin_instance.append(self.prefix)
 
         plugin_instance.append(self.node_id)
-
-        if namespace:
-            plugin_instance.append("namespace")
-            plugin_instance.append(namespace)
+        plugin_instance.append(context)
 
         plugin_instance = ".".join(plugin_instance)
 
         data = pprint.pformat((type, plugin_instance, instance
-                               , value, namespace))
+                               , value, context))
         collectd.debug("Dispatching: %s"%(data))
 
         val = collectd.Values()
@@ -51,8 +48,7 @@ class AerospikePlugin(object):
 
     def process_statistics(self, meta_stats, statistics, context, counters=None
                            , counts=None, storage=None, booleans=None
-                           , percents=None, operations=None, config=None
-                           , namespace=None):
+                           , percents=None, operations=None, config=None):
 
         if counters is None:
             counters = set()
@@ -96,17 +92,14 @@ class AerospikePlugin(object):
                     pass
                 else:
                     # Log numeric values that aren't emitted
-                    if namespace:
-                        stat_name = "%s.%s.%s"%(context, namespace, key)
-                    else:
-                        stat_name = "%s.%s"%(context, key)
+                    stat_name = "%s.%s"%(context, key)
 
                     collectd.info("Unused numeric stat: %s has value %s"%(
                         stat_name, value))
                     meta_stats["unknown_metrics"] += 1
                 continue
 
-            self.submit(value_type, key, value, namespace)
+            self.submit(value_type, key, value, context)
 
     def do_service_statistics(self, meta_stats, client, hosts):
         counters = set(["uptime",])
@@ -203,6 +196,7 @@ class AerospikePlugin(object):
             , "migrate_msgs_sent"
             , "migrate_num_incoming_accepted"
             , "migrate_num_incoming_refused"
+            , "proxy_action"
             , "proxy_initiate"
             , "proxy_retry"
             , "proxy_retry_new_dest"
@@ -424,15 +418,14 @@ class AerospikePlugin(object):
 
             self.process_statistics(meta_stats
                                     , statistics
-                                    , "namespace"
+                                    , "namespace.%s"%(namespace)
                                     , counters=counters
                                     , counts=counts
                                     , storage=storage
                                     , booleans=booleans
                                     , percents=percents
                                     , operations=operations
-                                    , config=config
-                                    , namespace=namespace)
+                                    , config=config)
 
     def do_latency_statistics(self, meta_stats, client, hosts):
         try:
@@ -461,18 +454,18 @@ class AerospikePlugin(object):
             tps_name = "%s_tps"%(hist_name)
             tps_value = row.pop(0)
 
-            self.submit("count", tps_name, tps_value)
+            self.submit("count", tps_name, tps_value, "latency")
 
             while columns:
                 name = "%s_pct%s"%(hist_name, columns.pop(0))
                 name = name.replace(">", "_gt_")
                 value = row.pop(0)
-                self.submit("percent", name, value)
+                self.submit("percent", name, value, "latency")
 
     def do_meta_statistics(self, meta_stats):
         for key, value in meta_stats.iteritems():
-            name = "meta.%s"%(key)
-            self.submit("count", name, value)
+            name = "%s"%(key)
+            self.submit("count", name, value, "meta")
 
     def get_all_statistics(self):
         collectd.debug("AEROSPIKE PLUGIN COLLECTING STATS")
@@ -552,15 +545,11 @@ def info_to_dict(value, delimiter=';'):
     for g in itertools.groupby(stat_param, lambda x: x[0]):
         try:
             value = [v[1] for v in g[1]]
-            value = ",".join(sorted(value)) if len(value) > 1 else value[0]
+            value = ",".join(sorted(value))
             stat_dict[g[0]] = value
         except:
-            # NOTE: 3.0 had a bug in stats at least prior to 3.0.44. This will
-            # ignore that bug.
-
-            # Not sure if this bug is fixed or not.. removing this try/catch
-            # results in things not working. TODO: investigate.
-            pass
+            collectd.warning("WARNING: info_to_dict had problems parsing %s"%(
+                value))
     return stat_dict
 
 def info_colon_to_dict(value):
