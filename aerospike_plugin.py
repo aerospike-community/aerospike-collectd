@@ -406,7 +406,12 @@ class AerospikePlugin(object):
         hosts = [(self.aerospike.host, self.aerospike.port)]
         policy = {"timeout": self.timeout}
         config = {"hosts":hosts, "policy":policy}
-        client = aerospike_client.client(config).connect()
+
+        client = aerospike_client.client(config)
+        if self.aerospike.user:
+            client.connect(self.aerospike.user, self.aerospike.password)
+        else:
+            client.connect()
 
         # Get this Nodes ID
         _, (_, node_id) = client.info("node", hosts=hosts).items()[0]
