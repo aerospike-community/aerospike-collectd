@@ -80,9 +80,9 @@ class AerospikePlugin(object):
             elif key in percents:
                 value_type = "percent"
             elif key in storage:
-                value_type = "storage"
+                value_type = "bytes"
             elif key in operations:
-                value_type = "operation"
+                value_type = "operations"
             elif key in config:
                 continue
             else:
@@ -129,8 +129,6 @@ class AerospikePlugin(object):
             , "record_refs"
             , "stat_evicted_objects_time"
             , "sub-records"
-            , "total-bytes-disk"
-            , "total-bytes-memory"
             , "tree_count"
             , "waiting_transactions"
             , "query_long_queue_size"
@@ -152,6 +150,8 @@ class AerospikePlugin(object):
             "data-used-bytes-memory"
             , "index-used-bytes-memory"
             , "sindex-used-bytes-memory"
+            , "total-bytes-disk"
+            , "total-bytes-memory"
             , "used-bytes-disk"
             , "used-bytes-memory"
         ])
@@ -330,8 +330,7 @@ class AerospikePlugin(object):
         ])
 
         counts = set([
-            "data-used-bytes-memory"
-            , "master-objects"
+            "master-objects"
             , "master-sub-objects"
             , "non-expirable-objects"
             , "nsup-cycle-duration"
@@ -343,8 +342,11 @@ class AerospikePlugin(object):
         ])
 
         storage = set([
-            "index-used-bytes-memory"
+            "data-used-bytes-memory"
+            , "index-used-bytes-memory"
             , "sindex-used-bytes-memory"
+            , "total-bytes-disk"
+            , "total-bytes-memory"
             , "used-bytes-disk"
             , "used-bytes-memory"
         ])
@@ -385,10 +387,8 @@ class AerospikePlugin(object):
             , "memory-size"
             , "max-ttl"
             , "filesize"
-            , "total-bytes-disk"
             , "min-avail-pct"
             , "fsync-max-sec"
-            , "total-bytes-memory"
             , "default-ttl"
             , "cold-start-evict-ttl"
             , "defrag-sleep"
