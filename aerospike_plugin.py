@@ -1,4 +1,5 @@
-import aerospike as aerospike_client
+import aerospike
+from aerospike.exception import TimeoutError, ClientError
 import itertools
 import re
 import pprint
@@ -48,9 +49,10 @@ class AerospikePlugin(object):
         val.values = [value, ]
         val.dispatch()
 
-    def process_statistics(self, statistics, context, counters=None, counts=None
-                           , storage=None, booleans=None, percents=None
-                           , operations=None, config=None, namespace=None):
+    def process_statistics(self, meta_stats, statistics, context, counters=None
+                           , counts=None, storage=None, booleans=None
+                           , percents=None, operations=None, config=None
+                           , namespace=None):
 
         if counters is None:
             counters = set()
@@ -101,11 +103,12 @@ class AerospikePlugin(object):
 
                     collectd.info("Unused numeric stat: %s has value %s"%(
                         stat_name, value))
+                    meta_stats["unknown_metrics"] += 1
                 continue
 
             self.submit(value_type, key, value, namespace)
 
-    def do_service_statistics(self, client, hosts):
+    def do_service_statistics(self, meta_stats, client, hosts):
         counters = set(["uptime",])
 
         counts = set([
@@ -306,18 +309,24 @@ class AerospikePlugin(object):
             , "write_prole"
         ])
 
-        _, (_, statistics) = client.info("statistics", hosts=hosts).items()[0]
-        statistics = info_to_dict(statistics)
-        self.process_statistics(statistics
-                                , "service"
-                                , counters=counters
-                                , counts=counts
-                                , storage=storage
-                                , booleans=booleans
-                                , percents=percents
-                                , operations=operations)
+        try:
+            _, (_, statistics) = client.info("statistics", hosts=hosts).items()[0]
+        except TimeoutError:
+            collectd.warning('WARNING: TimeoutError executing info("statistics")')
+            meta_stats["timeouts"] += 1
+        else:
+            statistics = info_to_dict(statistics)
+            self.process_statistics(meta_stats
+                                    , statistics
+                                    , "service"
+                                    , counters=counters
+                                    , counts=counts
+                                    , storage=storage
+                                    , booleans=booleans
+                                    , percents=percents
+                                    , operations=operations)
 
-    def do_namespace_statistics(self, client, hosts, namespaces):
+    def do_namespace_statistics(self, meta_stats, client, hosts, namespaces):
         counters = set([
             "available-bin-names"
             , "current-time"
@@ -402,11 +411,19 @@ class AerospikePlugin(object):
         ])
 
         for namespace in namespaces:
-            _, (_, statistics) = client.info("namespace/%s"%(namespace)
-                                             , hosts=hosts).items()[0]
+            command = "namespace/%s"%(namespace)
+            try:
+                _, (_, statistics) = client.info(command
+                                                 , hosts=hosts).items()[0]
+            except TimeoutError:
+                collectd.warning('WARNING: TimeoutError executing info("%s")'%(command))
+                meta_stats["timeouts"] += 1
+                continue
+
             statistics = info_to_dict(statistics)
 
-            self.process_statistics(statistics
+            self.process_statistics(meta_stats
+                                    , statistics
                                     , "namespace"
                                     , counters=counters
                                     , counts=counts
@@ -417,10 +434,15 @@ class AerospikePlugin(object):
                                     , config=config
                                     , namespace=namespace)
 
-    def do_latency_statistics(self, client, hosts):
-        _, (_, tdata) = client.info("latency:", hosts=hosts).items()[0]
+    def do_latency_statistics(self, meta_stats, client, hosts):
+        try:
+            _, (_, tdata) = client.info("latency:", hosts=hosts).items()[0]
+        except TimeoutError:
+            collectd.warning('WARNING: TimeoutError executing info("latency:")')
+            meta_stats["timeouts"] += 1
+            return
+
         tdata = tdata.split(';')[:-1]
-        data = {}
         while tdata != []:
             columns = tdata.pop(0)
             row = tdata.pop(0)
@@ -447,31 +469,58 @@ class AerospikePlugin(object):
                 value = row.pop(0)
                 self.submit("percent", name, value)
 
+    def do_meta_statistics(self, meta_stats):
+        for key, value in meta_stats.iteritems():
+            name = "meta.%s"%(key)
+            self.submit("count", name, value)
+
     def get_all_statistics(self):
         collectd.debug("AEROSPIKE PLUGIN COLLECTING STATS")
         hosts = [(self.aerospike.host, self.aerospike.port)]
         policy = {"timeout": self.timeout}
         config = {"hosts":hosts, "policy":policy}
 
-        client = aerospike_client.client(config)
-        if self.aerospike.user:
-            client.connect(self.aerospike.user, self.aerospike.password)
+        meta_stats = {"timeouts": 0
+                      , "unknown_metrics": 0
+                      , "connection_failure": 0}
+
+        client = aerospike.client(config)
+        try:
+            if self.aerospike.user:
+                client.connect(self.aerospike.user, self.aerospike.password)
+            else:
+                client.connect()
+        except ClientError:
+            collectd.warning('WARNING: ClientError unable to connect to Aerospike Node')
+            meta_stats["connection_failure"] = 1
         else:
-            client.connect()
+            # Get this Nodes ID
+            try:
+                _, (_, node_id) = client.info("node", hosts=hosts).items()[0]
+            except TimeoutError:
+                collectd.warning('WARNING: TimeoutError executing info("node")')
+                meta_stats["timeouts"] += 1
+            else:
+                self.node_id = node_id.strip()
+                self.do_service_statistics(meta_stats, client, hosts)
 
-        # Get this Nodes ID
-        _, (_, node_id) = client.info("node", hosts=hosts).items()[0]
-        self.node_id = node_id.strip()
-        self.do_service_statistics(client, hosts)
+                # Get list of namespaces
+                try:
+                    _, (_, namespaces) = client.info("namespaces"
+                                                     , hosts=hosts).items()[0]
+                except TimeoutError:
+                    collectd.warning('WARNING: TimeoutError executing info("namespaces")')
+                    meta_stats["timeouts"] += 1
+                else:
+                    namespaces = info_to_list(namespaces)
+                    self.do_namespace_statistics(meta_stats, client
+                                                 , hosts, namespaces)
 
-        # Get list of namespaces
-        _, (_, namespaces) = client.info("namespaces", hosts=hosts).items()[0]
-        namespaces = info_to_list(namespaces)
+                self.do_latency_statistics(meta_stats, client, hosts)
+            finally:
+                client.close()
 
-        self.do_namespace_statistics(client, hosts, namespaces)
-        self.do_latency_statistics(client, hosts)
-
-        client.close()
+        self.do_meta_statistics(meta_stats)
 
     def config(self, obj):
         for node in obj.children:
@@ -492,7 +541,7 @@ class AerospikePlugin(object):
                     self.plugin_name
                     , node.key))
 
-def info_to_dict(value, delimiter = ';'):
+def info_to_dict(value, delimiter=';'):
     """
     Simple function to convert string to dict
     """
@@ -502,7 +551,7 @@ def info_to_dict(value, delimiter = ';'):
                                 info_to_list(value, delimiter))
     for g in itertools.groupby(stat_param, lambda x: x[0]):
         try:
-            value = map(lambda v: v[1], g[1])
+            value = [v[1] for v in g[1]]
             value = ",".join(sorted(value)) if len(value) > 1 else value[0]
             stat_dict[g[0]] = value
         except:
@@ -520,10 +569,10 @@ def info_colon_to_dict(value):
     """
     return info_to_dict(value, ':')
 
-def info_to_list(value, delimiter = ";"):
+def info_to_list(value, delimiter=";"):
     return [s.strip() for s in re.split(delimiter, value)]
 
-def info_to_tuple(value, delimiter = ":"):
+def info_to_tuple(value, delimiter=":"):
     return tuple(info_to_list(value, delimiter))
 
 as_plugin = AerospikePlugin()
