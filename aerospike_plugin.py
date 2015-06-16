@@ -483,9 +483,10 @@ class AerospikePlugin(object):
                 client.connect(self.aerospike.user, self.aerospike.password)
             else:
                 client.connect()
-        except ClientError:
+        except (TimeoutError, ClientError):
             collectd.warning('WARNING: ClientError unable to connect to Aerospike Node')
             meta_stats["connection_failure"] = 1
+            return # Since we cannot get a node_id, submit will fail and crash
         else:
             # Get this Nodes ID
             try:
