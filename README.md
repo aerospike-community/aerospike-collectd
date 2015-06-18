@@ -28,7 +28,8 @@ TypesDB "/opt/collectd-plugins/aerospike_types.db"
     <Module aerospike_plugin>
         Host   "127.0.0.1"
         Port   3000
-        Prefix "cluster_name"
+        # Prefix "cluster_name"
+        HostNameOverride "clusters.cluster_name.host_name"
     </Module>
 </Plugin>
 ```

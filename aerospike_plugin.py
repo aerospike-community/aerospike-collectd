@@ -13,6 +13,7 @@ class AerospikePlugin(object):
     def __init__(self):
         self.plugin_name = "aerospike"
         self.prefix = None
+        self.host_name = None
         self.aerospike = Data()
         self.aerospike.host = "127.0.0.1"
         self.aerospike.port = 3000
@@ -36,6 +37,8 @@ class AerospikePlugin(object):
         collectd.debug("Dispatching: %s"%(data))
 
         val = collectd.Values()
+        if self.host_name:
+            val.host = self.host_name
         val.plugin = self.plugin_name
         val.plugin_instance = plugin_instance
         val.type = value_type
@@ -462,10 +465,13 @@ class AerospikePlugin(object):
                 value = row.pop(0)
                 self.submit("percent", name, value, "latency")
 
-    def do_meta_statistics(self, meta_stats):
+    def do_meta_statistics(self, meta_stats, context="meta"):
         for key, value in meta_stats.iteritems():
             name = "%s"%(key)
-            self.submit("count", name, value, "meta")
+            if isinstance(value, dict):
+                self.do_meta_statistics(value, context="%s.%s"%(context, name))
+            else:
+                self.submit("count", name, value, context)
 
     def get_all_statistics(self):
         collectd.debug("AEROSPIKE PLUGIN COLLECTING STATS")
@@ -530,6 +536,8 @@ class AerospikePlugin(object):
                 self.timeout = int(node.values[0])
             elif node.key == "Prefix":
                 self.prefix = node.values[0]
+            elif node.key == "HostNameOverride":
+                self.host_name = node.values[0]
             else:
                 collectd.warning("%s: Unknown configuration key %s"%(
                     self.plugin_name
