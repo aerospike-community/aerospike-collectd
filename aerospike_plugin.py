@@ -1,4 +1,5 @@
-import aerospike as aerospike_client
+import aerospike
+from aerospike.exception import TimeoutError, ClientError
 import itertools
 import re
 import pprint
@@ -11,6 +12,8 @@ class Data(object):
 class AerospikePlugin(object):
     def __init__(self):
         self.plugin_name = "aerospike"
+        self.prefix = None
+        self.host_name = None
         self.aerospike = Data()
         self.aerospike.host = "127.0.0.1"
         self.aerospike.port = 3000
@@ -19,30 +22,36 @@ class AerospikePlugin(object):
         self.node_id = None
         self.timeout = 2000
 
-    def submit(self, type, instance, value, namespace=None):
-        if namespace:
-            plugin_instance = "%s.%s"%(self.node_id, namespace)
-        else:
-            plugin_instance = self.node_id
+    def submit(self, value_type, instance, value, context):
+        plugin_instance = []
+        if self.prefix:
+            plugin_instance.append(self.prefix)
+
+        plugin_instance.append(self.node_id)
+        plugin_instance.append(context)
+
+        plugin_instance = ".".join(plugin_instance)
 
         data = pprint.pformat((type, plugin_instance, instance
-                               , value, namespace))
+                               , value, context))
         collectd.debug("Dispatching: %s"%(data))
 
         val = collectd.Values()
+        if self.host_name:
+            val.host = self.host_name
         val.plugin = self.plugin_name
         val.plugin_instance = plugin_instance
-        val.type = type
-        val.type_instance = instance
+        val.type = value_type
+        val.type_instance = instance.lower().replace('-', '_')
         # HACK with this dummy dict in place JSON parsing works
         # https://github.com/collectd/collectd/issues/716
-        val.meta={'0': True}
+        val.meta = {'0': True}
         val.values = [value, ]
         val.dispatch()
 
-    def process_statistics(self, statistics, counters=None, counts=None
-                           , storage=None, booleans=None, percents=None
-                           , operations=None, namespace=None):
+    def process_statistics(self, meta_stats, statistics, context, counters=None
+                           , counts=None, storage=None, booleans=None
+                           , percents=None, operations=None, config=None):
 
         if counters is None:
             counters = set()
@@ -56,32 +65,46 @@ class AerospikePlugin(object):
             percents = set()
         if operations is None:
             operations = set()
+        if config is None:
+            config = set()
 
         for key, value in statistics.iteritems():
             if key in counters:
-                type = "counter"
+                value_type = "counter"
             elif key in counts:
-                type = "count"
+                value_type = "count"
             elif key in booleans:
-                type = "boolean"
+                value_type = "boolean"
                 value = value.lower()
                 if value == "false" or value == "no" or value == "0":
                     value = 0
                 else:
                     value = 1
             elif key in percents:
-                type = "percent"
+                value_type = "percent"
             elif key in storage:
-                type = "storage"
+                value_type = "bytes"
             elif key in operations:
-                type = "operation"
+                value_type = "operations"
+            elif key in config:
+                continue
             else:
-                # not in any group, skip
+                try:
+                    float(value)
+                except ValueError:
+                    pass
+                else:
+                    # Log numeric values that aren't emitted
+                    stat_name = "%s.%s"%(context, key)
+
+                    collectd.info("Unused numeric stat: %s has value %s"%(
+                        stat_name, value))
+                    meta_stats["unknown_metrics"] += 1
                 continue
 
-            self.submit(type, key, value, namespace)
+            self.submit(value_type, key, value, context)
 
-    def do_service_statistics(self, client, hosts):
+    def do_service_statistics(self, meta_stats, client, hosts):
         counters = set(["uptime",])
 
         counts = set([
@@ -111,6 +134,8 @@ class AerospikePlugin(object):
             , "sub-records"
             , "tree_count"
             , "waiting_transactions"
+            , "query_long_queue_size"
+            , "query_short_queue_size"
         ])
 
         booleans = set([
@@ -128,6 +153,8 @@ class AerospikePlugin(object):
             "data-used-bytes-memory"
             , "index-used-bytes-memory"
             , "sindex-used-bytes-memory"
+            , "total-bytes-disk"
+            , "total-bytes-memory"
             , "used-bytes-disk"
             , "used-bytes-memory"
         ])
@@ -172,6 +199,7 @@ class AerospikePlugin(object):
             , "migrate_msgs_sent"
             , "migrate_num_incoming_accepted"
             , "migrate_num_incoming_refused"
+            , "proxy_action"
             , "proxy_initiate"
             , "proxy_retry"
             , "proxy_retry_new_dest"
@@ -278,22 +306,24 @@ class AerospikePlugin(object):
             , "write_prole"
         ])
 
-        unused = set([
-            "total-bytes-disk"
-            , "total-bytes-memory"
-        ])
+        try:
+            _, (_, statistics) = client.info("statistics", hosts=hosts).items()[0]
+        except (TimeoutError, ClientError):
+            collectd.warning('WARNING: TimeoutError executing info("statistics")')
+            meta_stats["timeouts"] += 1
+        else:
+            statistics = info_to_dict(statistics)
+            self.process_statistics(meta_stats
+                                    , statistics
+                                    , "service"
+                                    , counters=counters
+                                    , counts=counts
+                                    , storage=storage
+                                    , booleans=booleans
+                                    , percents=percents
+                                    , operations=operations)
 
-        _, (_, statistics) = client.info("statistics", hosts=hosts).items()[0]
-        statistics = info_to_dict(statistics)
-        self.process_statistics(statistics
-                                , counters=counters
-                                , counts=counts
-                                , storage=storage
-                                , booleans=booleans
-                                , percents=percents
-                                , operations=operations)
-
-    def do_namespace_statistics(self, client, hosts, namespaces):
+    def do_namespace_statistics(self, meta_stats, client, hosts, namespaces):
         counters = set([
             "available-bin-names"
             , "current-time"
@@ -303,8 +333,7 @@ class AerospikePlugin(object):
         ])
 
         counts = set([
-            "data-used-bytes-memory"
-            , "master-objects"
+            "master-objects"
             , "master-sub-objects"
             , "non-expirable-objects"
             , "nsup-cycle-duration"
@@ -316,8 +345,11 @@ class AerospikePlugin(object):
         ])
 
         storage = set([
-            "index-used-bytes-memory"
+            "data-used-bytes-memory"
+            , "index-used-bytes-memory"
             , "sindex-used-bytes-memory"
+            , "total-bytes-disk"
+            , "total-bytes-memory"
             , "used-bytes-disk"
             , "used-bytes-memory"
         ])
@@ -328,7 +360,9 @@ class AerospikePlugin(object):
         ])
 
         percents = set([
-            "free-pct-disk"
+            "available_pct"
+            , "cache-read-pct"
+            , "free-pct-disk"
             , "free-pct-memory"
             , "nsup-cycle-sleep-pct"
         ])
@@ -348,24 +382,63 @@ class AerospikePlugin(object):
             , "set-evicted-objects"
         ])
 
+        config = set([
+            "max-write-cache"
+            , "defrag-startup-minimum"
+            , "ldt-page-size"
+            , "high-water-memory-pct"
+            , "memory-size"
+            , "max-ttl"
+            , "filesize"
+            , "min-avail-pct"
+            , "fsync-max-sec"
+            , "default-ttl"
+            , "cold-start-evict-ttl"
+            , "defrag-sleep"
+            , "write-smoothing-period"
+            , "stop-writes-pct"
+            , "defrag-queue-min"
+            , "post-write-queue"
+            , "high-water-disk-pct"
+            , "writethreads"
+            , "writecache"
+            , "evict-tenths-pct"
+            , "defrag-lwm-pct"
+            , "flush-max-ms"
+        ])
+
         for namespace in namespaces:
-            _, (_, statistics) = client.info("namespace/%s"%(namespace)
-                                             , hosts=hosts).items()[0]
+            command = "namespace/%s"%(namespace)
+            try:
+                _, (_, statistics) = client.info(command
+                                                 , hosts=hosts).items()[0]
+            except (TimeoutError, ClientError):
+                collectd.warning('WARNING: TimeoutError executing info("%s")'%(command))
+                meta_stats["timeouts"] += 1
+                continue
+
             statistics = info_to_dict(statistics)
 
-            self.process_statistics(statistics
+            self.process_statistics(meta_stats
+                                    , statistics
+                                    , "namespace.%s"%(namespace)
                                     , counters=counters
                                     , counts=counts
                                     , storage=storage
                                     , booleans=booleans
                                     , percents=percents
                                     , operations=operations
-                                    , namespace=namespace)
+                                    , config=config)
 
-    def do_latency_statistics(self, client, hosts):
-        _, (_, tdata) = client.info("latency:", hosts=hosts).items()[0]
+    def do_latency_statistics(self, meta_stats, client, hosts):
+        try:
+            _, (_, tdata) = client.info("latency:", hosts=hosts).items()[0]
+        except (TimeoutError, ClientError):
+            collectd.warning('WARNING: TimeoutError executing info("latency:")')
+            meta_stats["timeouts"] += 1
+            return
+
         tdata = tdata.split(';')[:-1]
-        data = {}
         while tdata != []:
             columns = tdata.pop(0)
             row = tdata.pop(0)
@@ -381,36 +454,73 @@ class AerospikePlugin(object):
 
             # Don't need TPS column name
             columns.pop(0)
-            tps_name = "%s_TPS"%(hist_name)
+            tps_name = "%s_tps"%(hist_name)
             tps_value = row.pop(0)
 
-            self.submit("count", tps_name, tps_value)
+            self.submit("count", tps_name, tps_value, "latency")
 
             while columns:
                 name = "%s_pct%s"%(hist_name, columns.pop(0))
-                value = row.pop(0) * 100
-                self.submit("percent", name, value)
+                name = name.replace(">", "_gt_")
+                value = row.pop(0)
+                self.submit("percent", name, value, "latency")
+
+    def do_meta_statistics(self, meta_stats, context="meta"):
+        for key, value in meta_stats.iteritems():
+            name = "%s"%(key)
+            if isinstance(value, dict):
+                self.do_meta_statistics(value, context="%s.%s"%(context, name))
+            else:
+                self.submit("count", name, value, context)
 
     def get_all_statistics(self):
         collectd.debug("AEROSPIKE PLUGIN COLLECTING STATS")
         hosts = [(self.aerospike.host, self.aerospike.port)]
         policy = {"timeout": self.timeout}
         config = {"hosts":hosts, "policy":policy}
-        client = aerospike_client.client(config).connect()
 
-        # Get this Nodes ID
-        _, (_, node_id) = client.info("node", hosts=hosts).items()[0]
-        self.node_id = node_id.strip()
-        self.do_service_statistics(client, hosts)
+        meta_stats = {"timeouts": 0
+                      , "unknown_metrics": 0
+                      , "connection_failure": 0}
 
-        # Get list of namespaces
-        _, (_, namespaces) = client.info("namespaces", hosts=hosts).items()[0]
-        namespaces = info_to_list(namespaces)
+        client = aerospike.client(config)
+        try:
+            if self.aerospike.user:
+                client.connect(self.aerospike.user, self.aerospike.password)
+            else:
+                client.connect()
+        except (TimeoutError, ClientError):
+            collectd.warning('WARNING: ClientError unable to connect to Aerospike Node')
+            meta_stats["connection_failure"] = 1
+            return # Since we cannot get a node_id, submit will fail and crash
+        else:
+            # Get this Nodes ID
+            try:
+                _, (_, node_id) = client.info("node", hosts=hosts).items()[0]
+            except (TimeoutError, ClientError):
+                collectd.warning('WARNING: TimeoutError executing info("node")')
+                meta_stats["timeouts"] += 1
+            else:
+                self.node_id = node_id.strip()
+                self.do_service_statistics(meta_stats, client, hosts)
 
-        self.do_namespace_statistics(client, hosts, namespaces)
-        self.do_latency_statistics(client, hosts)
+                # Get list of namespaces
+                try:
+                    _, (_, namespaces) = client.info("namespaces"
+                                                     , hosts=hosts).items()[0]
+                except (TimeoutError, ClientError):
+                    collectd.warning('WARNING: TimeoutError executing info("namespaces")')
+                    meta_stats["timeouts"] += 1
+                else:
+                    namespaces = info_to_list(namespaces)
+                    self.do_namespace_statistics(meta_stats, client
+                                                 , hosts, namespaces)
 
-        client.close()
+                self.do_latency_statistics(meta_stats, client, hosts)
+            finally:
+                client.close()
+
+        self.do_meta_statistics(meta_stats)
 
     def config(self, obj):
         for node in obj.children:
@@ -424,12 +534,16 @@ class AerospikePlugin(object):
                 self.aerospike.password = node.values[0]
             elif node.key == "Timeout":
                 self.timeout = int(node.values[0])
+            elif node.key == "Prefix":
+                self.prefix = node.values[0]
+            elif node.key == "HostNameOverride":
+                self.host_name = node.values[0]
             else:
                 collectd.warning("%s: Unknown configuration key %s"%(
                     self.plugin_name
                     , node.key))
 
-def info_to_dict(value, delimiter = ';'):
+def info_to_dict(value, delimiter=';'):
     """
     Simple function to convert string to dict
     """
@@ -439,16 +553,12 @@ def info_to_dict(value, delimiter = ';'):
                                 info_to_list(value, delimiter))
     for g in itertools.groupby(stat_param, lambda x: x[0]):
         try:
-            value = map(lambda v: v[1], g[1])
-            value = ",".join(sorted(value)) if len(value) > 1 else value[0]
+            value = [v[1] for v in g[1]]
+            value = ",".join(sorted(value))
             stat_dict[g[0]] = value
         except:
-            # NOTE: 3.0 had a bug in stats at least prior to 3.0.44. This will
-            # ignore that bug.
-
-            # Not sure if this bug is fixed or not.. removing this try/catch
-            # results in things not working. TODO: investigate.
-            pass
+            collectd.warning("WARNING: info_to_dict had problems parsing %s"%(
+                value))
     return stat_dict
 
 def info_colon_to_dict(value):
@@ -457,10 +567,10 @@ def info_colon_to_dict(value):
     """
     return info_to_dict(value, ':')
 
-def info_to_list(value, delimiter = ";"):
+def info_to_list(value, delimiter=";"):
     return [s.strip() for s in re.split(delimiter, value)]
 
-def info_to_tuple(value, delimiter = ":"):
+def info_to_tuple(value, delimiter=":"):
     return tuple(info_to_list(value, delimiter))
 
 as_plugin = AerospikePlugin()

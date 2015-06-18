@@ -1,0 +1,2 @@
+count            value:GAUGE:0.0:U
+boolean          value:GAUGE:0:1
