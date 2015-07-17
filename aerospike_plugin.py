@@ -22,12 +22,13 @@ class AerospikePlugin(object):
         self.node_id = None
         self.timeout = 2000
 
-    def submit(self, value_type, instance, value, context):
+    def submit(self, value_type, instance, value, context, use_node_id=True):
         plugin_instance = []
         if self.prefix:
             plugin_instance.append(self.prefix)
 
-        plugin_instance.append(self.node_id)
+        if use_node_id:
+          plugin_instance.append(self.node_id)
         plugin_instance.append(context)
 
         plugin_instance = ".".join(plugin_instance)
@@ -480,8 +481,7 @@ class AerospikePlugin(object):
         config = {"hosts":hosts, "policy":policy}
 
         meta_stats = {"timeouts": 0
-                      , "unknown_metrics": 0
-                      , "connection_failure": 0}
+                      , "unknown_metrics": 0}
 
         client = aerospike.client(config)
         try:
@@ -491,9 +491,10 @@ class AerospikePlugin(object):
                 client.connect()
         except (TimeoutError, ClientError):
             collectd.warning('WARNING: ClientError unable to connect to Aerospike Node')
-            meta_stats["connection_failure"] = 1
-            return # Since we cannot get a node_id, submit will fail and crash
+            self.submit("count", "connection_failure", 1, "meta", use_node_id=False)
+            return
         else:
+            self.submit("count", "connection_failure", 0, "meta", use_node_id=False)
             # Get this Nodes ID
             try:
                 _, (_, node_id) = client.info("node", hosts=hosts).items()[0]
