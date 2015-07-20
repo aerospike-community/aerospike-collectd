@@ -466,6 +466,26 @@ class AerospikePlugin(object):
                 value = row.pop(0)
                 self.submit("percent", name, value, "latency")
 
+    def do_cluster_statistics(self, meta_stats, client, hosts):
+      try:
+        _, (_, tservices) = client.info("services", hosts=hosts).items()[0]
+      except (TimeoutError, ClientError):
+        collectd.warning('WARNING: TimeoutError executing info("services")')
+        meta_stats["timeouts"] += 1
+
+      try:
+        _, (_, talumni) = client.info("services-alumni", hosts=hosts).items()[0]
+      except (TimeoutError, ClientError):
+        collectd.warning('WARNING: TimeoutError executing info("services-alumni")')
+        meta_stats["timeouts"] += 1
+
+      if tservices and talumni:
+        services = tservices.split(";")
+        alumni = talumni.split(";")
+
+        self.submit("count", "services", len(services), "cluster")
+        self.submit("count", "services-alumni", len(alumni), "cluster")
+
     def do_meta_statistics(self, meta_stats, context="meta"):
         for key, value in meta_stats.iteritems():
             name = "%s"%(key)
@@ -518,6 +538,8 @@ class AerospikePlugin(object):
                                                  , hosts, namespaces)
 
                 self.do_latency_statistics(meta_stats, client, hosts)
+
+                self.do_cluster_statistics(meta_stats, client, hosts)
             finally:
                 client.close()
 
