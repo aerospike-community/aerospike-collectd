@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import aerospike
 from aerospike.exception import TimeoutError, ClientError
 import itertools
@@ -32,9 +34,8 @@ class AerospikePlugin(object):
         plugin_instance.append(context)
 
         plugin_instance = ".".join(plugin_instance)
-
-        data = pprint.pformat((type, plugin_instance, instance
-                               , value, context))
+        data = pprint.saferepr((value_type,plugin_instance,instance
+                               ,value,context))
         collectd.debug("Dispatching: %s"%(data))
 
         val = collectd.Values()
@@ -53,7 +54,6 @@ class AerospikePlugin(object):
     def process_statistics(self, meta_stats, statistics, context, counters=None
                            , counts=None, storage=None, booleans=None
                            , percents=None, operations=None, config=None):
-
         if counters is None:
             counters = set()
         if counts is None:
@@ -68,16 +68,15 @@ class AerospikePlugin(object):
             operations = set()
         if config is None:
             config = set()
-
         for key, value in statistics.iteritems():
             if key in counters:
-                value_type = "counter"
+                value_type = "count"
             elif key in counts:
                 value_type = "count"
             elif key in booleans:
                 value_type = "boolean"
                 value = value.lower()
-                if value == "false" or value == "no" or value == "0":
+                if value == "false" or value == "no" or value == "0" or value == "CLUSTER_DOWN":
                     value = 0
                 else:
                     value = 1
@@ -86,7 +85,7 @@ class AerospikePlugin(object):
             elif key in storage:
                 value_type = "bytes"
             elif key in operations:
-                value_type = "operations"
+                value_type = "count"
             elif key in config:
                 continue
             else:
@@ -161,7 +160,19 @@ class AerospikePlugin(object):
         ])
 
         operations = set([
-            "batch_errors"
+            "aggr_scans_succeeded"
+            , "aggr_scans_failed"
+            , "basic_scans_failed"
+            , "basic_scans_succeeded"
+            , "batch_errors"
+            , "batch_index_initiate"
+            , "batch_index_complete"
+            , "batch_index_timeout"
+            , "batch_index_errors"
+            , "batch_index_unused_buffers"
+            , "batch_index_huge_buffers"
+            , "batch_index_created_buffers"
+            , "batch_index_destroyed_buffers"
             , "batch_initiate"
             , "batch_timeout"
             , "err_duplicate_proxy_request"
@@ -175,6 +186,7 @@ class AerospikePlugin(object):
             , "err_sync_copy_null_master"
             , "err_sync_copy_null_node"
             , "err_tsvc_requests"
+            , "err_tsvc_requests_timeout"
             , "err_write_fail_bin_exists"
             , "err_write_fail_bin_name"
             , "err_write_fail_bin_not_found"
@@ -216,6 +228,7 @@ class AerospikePlugin(object):
             , "query_avg_rec_count"
             , "query_fail"
             , "query_long_queue_full"
+            , "query_long_reqs"
             , "query_long_running"
             , "query_lookup_abort"
             , "query_lookup_avg_rec_count"
@@ -224,6 +237,7 @@ class AerospikePlugin(object):
             , "query_lookup_success"
             , "query_reqs"
             , "query_short_queue_full"
+            , "query_short_reqs"
             , "query_short_running"
             , "query_success"
             , "query_tracked"
@@ -238,6 +252,7 @@ class AerospikePlugin(object):
             , "rw_err_write_cluster_key"
             , "rw_err_write_internal"
             , "rw_err_write_send"
+            , "scans_active"
             , "sindex_gc_activity_dur"
             , "sindex_gc_garbage_cleaned"
             , "sindex_gc_garbage_found"
@@ -290,6 +305,8 @@ class AerospikePlugin(object):
             , "tscan_initiate"
             , "tscan_pending"
             , "tscan_succeeded"
+            , "udf_bg_scans_succeeded"
+            , "udf_bg_scans_failed"
             , "udf_delete_err_others"
             , "udf_delete_reqs"
             , "udf_delete_success"
@@ -431,6 +448,50 @@ class AerospikePlugin(object):
                                     , operations=operations
                                     , config=config)
 
+    def do_dc_statistics(self, meta_stats, client, hosts, datacenters):
+        counters = set([
+           "xdr_dc_delete_ship_attempts"
+           , "xdr_dc_rec_ship_attempts"
+           , "xdr_dc_remote_ship_ok"
+        ])
+        counts = set([
+           "xdr_dc_size"
+           , "open_conn"
+           , "xdr_dc_recs_shipping"
+           , "xdr_dc_timelag"
+           , "latency_avg_ship_ema"
+           , "pool_conn"
+        ])
+        percents = set([
+           "est_ship_compression_pct"
+        ])
+        booleans = set([
+           "xdr_dc_state"
+        ])
+        storage = set([
+           "esmt_byes_put_compressed"
+        ])
+        for dc in datacenters:
+            command = "dc/%s"%(dc)
+            try:
+                _, (_, statistics) = client.info(command
+                                                 , hosts=hosts).items()[0]
+            except (TimeoutError, ClientError):
+                collectd.warning('WARNING: TimeoutError executing info("%s")'%(command))
+                meta_stats["timeouts"] += 1
+                continue
+
+            statistics = info_to_dict(statistics)
+
+            self.process_statistics(meta_stats
+                                    , statistics
+                                    , "namespace.%s"%(namespace)
+                                    , counters=counters
+                                    , counts=counts
+                                    , storage=storage
+                                    , booleans=booleans
+                                    , percents=percents)
+
     def do_latency_statistics(self, meta_stats, client, hosts):
         try:
             _, (_, tdata) = client.info("latency:", hosts=hosts).items()[0]
@@ -536,6 +597,18 @@ class AerospikePlugin(object):
                     namespaces = info_to_list(namespaces)
                     self.do_namespace_statistics(meta_stats, client
                                                  , hosts, namespaces)
+                # Get list of XDR targets
+                try:
+                    _, (_, dc_info) = client.info("get-dc-config"
+                                                     , hosts=hosts).items()[0]
+                except (TimeoutError, ClientError):  
+                    collectd.warning('WARNING: TimeoutError executing info("get-dc-config")')
+                    meta_stats["timeouts"] += 1
+                else:
+                    if dc_info:
+                        dcs = info_to_list(dc_info)
+                        self.do_dc_statistics(meta_stats, client
+                                                 , hosts, dcs)
 
                 self.do_latency_statistics(meta_stats, client, hosts)
 
@@ -595,6 +668,11 @@ def info_to_list(value, delimiter=";"):
 
 def info_to_tuple(value, delimiter=":"):
     return tuple(info_to_list(value, delimiter))
+
+def info_to_dc_names(value):
+    v = value.strip().split(';')
+    return [ s.split(':')[0].split('=')[1] for s in v ]
+
 
 as_plugin = AerospikePlugin()
 collectd.register_read(as_plugin.get_all_statistics)
