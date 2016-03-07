@@ -5,6 +5,10 @@ Aerospike plugin for collectd.
 Release Notes
 ==============
 
+v0.6.1
+------
+- Added aerospike.conf
+
 v0.6.0
 ------
 - Added XDR stats (Enterprise 3.7.4+)
