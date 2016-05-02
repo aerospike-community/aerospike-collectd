@@ -1,2 +1,4 @@
-count            value:GAUGE:0.0:U
+count            value:COUNTER:0.0:U
 boolean          value:GAUGE:0:1
+percent          value:GAUGE:0:100
+bytes            value:GAUGE:0.0:U

@@ -4,12 +4,23 @@ Aerospike plugin for collectd.
 
 Release Notes
 ==============
+
+v0.6.1
+------
+- Added aerospike.conf
+
+v0.6.0
+------
+- Added XDR stats (Enterprise 3.7.4+)
+- Added more metrics from statistics check
+- Reverted certain types in aerospike\_types.db 
+
 v0.5.0
 ------
 - Not compatible with 0.0.0
 - Effort will be taken in future releases to preserve compatibility.
 - Service level stats now have a context string "service"
-- Removed types from aerospike_types.db that conflicted with collectd's
+- Removed types from aerospike\_types.db that conflicted with collectd's
   default types.
 - Added meta stats about this plugins performance.
 - Added optional HostNameOverride configuration parameter.
@@ -54,7 +65,6 @@ Features
 - Service Level Stats (`asinfo -v "statistics"`)
 - Namespace Stats (`asinfo -v "namespace/NAMESPACE_NAME"`)
 - Latency Stats (`asinfo -v "latency:"`)
+- XDR Stats (`asinfo  -v "dc/DATACENTER_NAME"`)
 - Can use Aerospike Security accounts
 - (TODO) Configuration Stats (`asinfo -v "get-config:context=CONTEXT"`)
-- (TODO) XDR Stats (`asinfo -p 3004 -v "get-config:context=service"`)
-- (TODO) Optionally disable stats (DisableXDR true)
