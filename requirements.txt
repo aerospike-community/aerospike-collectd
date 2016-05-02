@@ -1,2 +1,5 @@
-aerospike
+pyyaml
 collectd
+
+# Uncomment the following when using authentication
+#bcrypt
