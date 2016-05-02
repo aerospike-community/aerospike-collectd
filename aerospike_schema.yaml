@@ -341,6 +341,11 @@ namespace:
     - master-sub-objects
     - max-evicted-ttl
     - max-void-time
+    - migrate-rx-partitions-initial
+    - migrate-rx-partitions-remaining
+    - migrate-tx-partitions-initial
+    - migrate-tx-partitions-remaining
+    - migrate-tx-partitions-imbalance
     - non-expirable-objects
     - nsup-cycle-duration
     - objects
