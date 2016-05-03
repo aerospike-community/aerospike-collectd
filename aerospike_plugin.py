@@ -504,7 +504,6 @@ def datacenters(client, config, meta, emit):
         # so we reduce this to a debug message
         collectd.debug('Failed to execute info "%s" - %s' % (req, e))
     else:
-        collectd.warning('get-dc-config => %s' % (res))
         datacenters = parse(res, seq())
         for entry in datacenters:
             dc = dict(parse(entry, seq(entry=pair(), delim=':')))
@@ -513,11 +512,9 @@ def datacenters(client, config, meta, emit):
 
 def datacenter(client, config, meta, emit, dc):
 
-    collectd.warning('datacenter: %s' % (dc))
     req = "dc/%s" % (dc['DC_Name'])
     res = None
 
-    collectd.warning('datacenter req: %s' % (req))
     try:
         res = client.info(req)
     except ClientError as e:
