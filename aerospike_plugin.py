@@ -391,13 +391,13 @@ class Schema(object):
     def lookup(self, category, name, val):
         types = self.schema[category] if category in self.schema else {}
         for type, metrics in types.iteritems():
-            if name in metrics:
-                yield type, self.value(name, val, type)
+            if any (m.startswith(name,0) for m in metrics):
+                yield type, self.value(name, category, val, type)
 
-    def value(self, name, val, type):
+    def value(self, name, cat, val, type):
 
-        if name in self.mappings:
-            mapping = self.mappings[name]
+        if cat in self.mappings and type in self.mappings[cat] and name in self.mappings[cat][type]:
+            mapping = self.mappings[cat][type][name]
             if val in mapping:
                 val = mapping[val]
             elif '*' in mapping:

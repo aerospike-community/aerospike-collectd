@@ -427,6 +427,7 @@ datacenter:
     - dc_open_conn
     - dc_recs_inflight
     - dc_size
+    - dc_state:CLUSTER_DOWN=0;CLUSTER_UP=1;CLUSTER_WINDOW_SHIP=2;CLUSTER_INACTIVE=3
   
   bytes:
     - dc_esmt_bytes_shipped
@@ -439,9 +440,6 @@ datacenter:
   percent:
     - est_ship_compression_pct
     - dc_esmt_ship_avg_comp_pct
-
-  boolean:
-    - dc_state:CLUSTER_UP=true;*=false
 
   bytes:
     - esmt_byes_put_compressed
