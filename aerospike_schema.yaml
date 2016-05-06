@@ -441,4 +441,3 @@ datacenter:
   percent:
     - est_ship_compression_pct
     - dc_esmt_ship_avg_comp_pct
-
