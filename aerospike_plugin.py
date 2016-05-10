@@ -391,7 +391,7 @@ class Schema(object):
     def lookup(self, category, name, val):
         types = self.schema[category] if category in self.schema else {}
         for type, metrics in types.iteritems():
-            if any (m.startswith(name,0) for m in metrics):
+            if any(m.startswith(name, 0) for m in metrics):
                 yield type, self.value(name, category, val, type)
 
     def value(self, name, cat, val, type):
@@ -404,7 +404,10 @@ class Schema(object):
                 val = mapping['*']
 
         if type == 'boolean':
-            val = 1 if bool(val) else 0
+            if str(val).lower() in ("false", "0"):
+                val = 0
+            else:
+                val = 1
 
         return val
 
