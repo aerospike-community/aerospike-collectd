@@ -389,30 +389,6 @@ namespace:
     - set-deleted-objects
     - set-evicted-objects
 
-  # config:
-  #   - max-write-cache
-  #   - defrag-startup-minimum
-  #   - ldt-page-size
-  #   - high-water-memory-pct
-  #   - memory-size
-  #   - max-ttl
-  #   - filesize
-  #   - min-avail-pct
-  #   - fsync-max-sec
-  #   - default-ttl
-  #   - cold-start-evict-ttl
-  #   - defrag-sleep
-  #   - write-smoothing-period
-  #   - stop-writes-pct
-  #   - defrag-queue-min
-  #   - post-write-queue
-  #   - high-water-disk-pct
-  #   - writethreads
-  #   - writecache
-  #   - evict-tenths-pct
-  #   - defrag-lwm-pct
-  #   - flush-max-ms
-
 # ==============================================================================
 # Datacenter (XDR) specific metrics recorded per datacenter
 # ------------------------------------------------------------------------------
