@@ -140,6 +140,7 @@ service:
     - queue
     - record_locks
     - record_refs
+    - remaining_migrations
     - stat_evicted_objects_time
     - sub-records
     - tree_count
@@ -341,11 +342,15 @@ namespace:
     - master-sub-objects
     - max-evicted-ttl
     - max-void-time
+    - migrate-rx-instance-count
+    - migrate-rx-partitions-active
     - migrate-rx-partitions-initial
     - migrate-rx-partitions-remaining
+    - migrate-tx-instance-count
+    - migrate-tx-partitions-active
+    - migrate-tx-partitions-imbalance
     - migrate-tx-partitions-initial
     - migrate-tx-partitions-remaining
-    - migrate-tx-partitions-imbalance
     - non-expirable-objects
     - nsup-cycle-duration
     - objects
