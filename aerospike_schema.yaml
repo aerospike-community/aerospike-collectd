@@ -391,6 +391,10 @@ namespace:
     - ldt_updates
     - ldt_writes
     - ldt_write_success
+    - migrate-records-skipped
+    - migrate-records-transmitted
+    - migrate-record-retransmits
+    - migrate-record-receives
     - set-deleted-objects
     - set-evicted-objects
 
