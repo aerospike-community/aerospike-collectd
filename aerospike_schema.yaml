@@ -140,6 +140,7 @@ service:
     - queue
     - record_locks
     - record_refs
+    - remaining_migrations
     - stat_evicted_objects_time
     - sub-records
     - tree_count
@@ -341,11 +342,15 @@ namespace:
     - master-sub-objects
     - max-evicted-ttl
     - max-void-time
+    - migrate-rx-instance-count
+    - migrate-rx-partitions-active
     - migrate-rx-partitions-initial
     - migrate-rx-partitions-remaining
+    - migrate-tx-instance-count
+    - migrate-tx-partitions-active
+    - migrate-tx-partitions-imbalance
     - migrate-tx-partitions-initial
     - migrate-tx-partitions-remaining
-    - migrate-tx-partitions-imbalance
     - non-expirable-objects
     - nsup-cycle-duration
     - objects
@@ -386,32 +391,12 @@ namespace:
     - ldt_updates
     - ldt_writes
     - ldt_write_success
+    - migrate-records-skipped
+    - migrate-records-transmitted
+    - migrate-record-retransmits
+    - migrate-record-receives
     - set-deleted-objects
     - set-evicted-objects
-
-  # config:
-  #   - max-write-cache
-  #   - defrag-startup-minimum
-  #   - ldt-page-size
-  #   - high-water-memory-pct
-  #   - memory-size
-  #   - max-ttl
-  #   - filesize
-  #   - min-avail-pct
-  #   - fsync-max-sec
-  #   - default-ttl
-  #   - cold-start-evict-ttl
-  #   - defrag-sleep
-  #   - write-smoothing-period
-  #   - stop-writes-pct
-  #   - defrag-queue-min
-  #   - post-write-queue
-  #   - high-water-disk-pct
-  #   - writethreads
-  #   - writecache
-  #   - evict-tenths-pct
-  #   - defrag-lwm-pct
-  #   - flush-max-ms
 
 # ==============================================================================
 # Datacenter (XDR) specific metrics recorded per datacenter
@@ -431,6 +416,7 @@ datacenter:
   
   bytes:
     - dc_esmt_bytes_shipped
+    - esmt_byes_put_compressed
   
   operations:
     - dc_remote_ship_ok
@@ -440,6 +426,3 @@ datacenter:
   percent:
     - est_ship_compression_pct
     - dc_esmt_ship_avg_comp_pct
-
-  bytes:
-    - esmt_byes_put_compressed
