@@ -1,506 +1,542 @@
-#!/usr/bin/python
-
-import aerospike
-from aerospike.exception import TimeoutError, ClientError
-import itertools
-import re
-import pprint
+#!/usr/bin/env python
+# ------------------------------------------------------------------------------
+# Copyright 2012-2016 Aerospike, Inc.
+#
+# Portions may be licensed to Aerospike, Inc. under one or more contributor
+# license agreements.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy of
+# the License at http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations under
+# the License.
+# ------------------------------------------------------------------------------
 
 import collectd
+import os
+import re
+import socket
+import struct
+import time
+import yaml
 
-class Data(object):
+from ctypes import create_string_buffer
+
+
+PLUGIN_NAME = 'aerospike'
+PLUGIN_FILE = os.path.abspath(__file__)
+PLUGIN_DIR = os.path.dirname(PLUGIN_FILE)
+
+SCHEMA_LOCAL = os.path.join(PLUGIN_DIR, 'aerospike_schema.yaml')
+SCHEMA_INSTALLED = '/opt/collectd-plugins/aerospike_schema.yaml'
+
+DEFAULT_HOST = '127.0.0.1'
+DEFAULT_PORT = 3000
+DEFAULT_TIMEOUT = 0.7
+
+# =============================================================================
+#
+# Parsers
+#
+# -----------------------------------------------------------------------------
+
+
+def value():
+    def parse(input):
+        if input == None:
+            return None
+        return input.strip()
+    return parse
+
+
+def pair(delim='=', key=value(), value=value()):
+    def parse(input):
+        if input is None:
+            return None
+        p = input.strip().strip(delim).split(delim, 1)
+        lp = len(p)
+        if lp == 2:
+            (k, v) = p
+            return (key(k), value(v))
+        elif lp == 1:
+            k = p[0]
+            return (key(k), value(None))
+        else:
+            return (key(None), value(None))
+    return parse
+
+
+def seq(delim=';', entry=value()):
+    def parse(input):
+        if input is None:
+            return None
+        return (entry(e) for e in input.strip().strip(delim).split(delim))
+    return parse
+
+
+def pairs():
+    return seq(entry=pair())
+
+
+def clean(res):
+    if res is None:
+        return None
+    res = res.strip().strip(';').strip(':').replace(';;', ';')
+    if len(res) > 0:
+        return res
+    return None
+
+
+def parse(input, parser=value()):
+    return parser(clean(input)) if input is not None else input
+
+
+# =============================================================================
+#
+# Counter
+# Boosted from python 2.7 collections.Counter, sans comments and some methods.
+#
+# -----------------------------------------------------------------------------
+
+class Counter(dict):
+
+    def __init__(self, iterable=None, **kwds):
+        self.update(iterable, **kwds)
+
+    def __missing__(self, key):
+        return 0
+
+    @classmethod
+    def fromkeys(cls, iterable, v=None):
+        raise NotImplementedError(
+            'Counter.fromkeys() is undefined.  Use Counter(iterable) instead.')
+
+    def update(self, iterable=None, **kwds):
+        if iterable is not None:
+            if isinstance(iterable, Mapping):
+                if self:
+                    self_get = self.get
+                    for elem, count in iterable.iteritems():
+                        self[elem] = self_get(elem, 0) + count
+                else:
+                    dict.update(self, iterable)
+            else:
+                self_get = self.get
+                for elem in iterable:
+                    self[elem] = self_get(elem, 0) + 1
+        if kwds:
+            self.update(kwds)
+
+    def subtract(self, iterable=None, **kwds):
+        if iterable is not None:
+            self_get = self.get
+            if isinstance(iterable, Mapping):
+                for elem, count in iterable.items():
+                    self[elem] = self_get(elem, 0) - count
+            else:
+                for elem in iterable:
+                    self[elem] = self_get(elem, 0) - 1
+        if kwds:
+            self.subtract(kwds)
+
+    def copy(self):
+        return Counter(self)
+
+    def __delitem__(self, elem):
+        if elem in self:
+            dict.__delitem__(self, elem)
+
+    def __repr__(self):
+        if not self:
+            return '%s()' % self.__class__.__name__
+        items = ', '.join(map('%r: %r'.__mod__, self.iteritems()))
+        return '%s({%s})' % (self.__class__.__name__, items)
+
+    def __add__(self, other):
+        if not isinstance(other, Counter):
+            return NotImplemented
+        result = Counter()
+        for elem in set(self) | set(other):
+            newcount = self[elem] + other[elem]
+            if newcount > 0:
+                result[elem] = newcount
+        return result
+
+    def __sub__(self, other):
+        if not isinstance(other, Counter):
+            return NotImplemented
+        result = Counter()
+        for elem in set(self) | set(other):
+            newcount = self[elem] - other[elem]
+            if newcount > 0:
+                result[elem] = newcount
+        return result
+
+
+# =============================================================================
+#
+# Client
+#
+# -----------------------------------------------------------------------------
+
+STRUCT_PROTO = struct.Struct('! Q')
+STRUCT_AUTH = struct.Struct('! xxBB12x')
+STRUCT_FIELD = struct.Struct('! IB')
+
+MSG_VERSION = 0
+MSG_TYPE = 2
+AUTHENTICATE = 0
+USER = 0
+CREDENTIAL = 3
+SALT = "$2a$10$7EqJtq98hPqEX7fNZaFWoO"
+
+
+class ClientError(Exception):
     pass
 
-class AerospikePlugin(object):
-    def __init__(self):
-        self.plugin_name = "aerospike"
-        self.prefix = None
-        self.host_name = None
-        self.aerospike = Data()
-        self.aerospike.host = "127.0.0.1"
-        self.aerospike.port = 3000
-        self.aerospike.user = None
-        self.aerospike.password = None
-        self.node_id = None
-        self.timeout = 2000
 
-    def submit(self, value_type, instance, value, context, use_node_id=True):
-        plugin_instance = []
-        if self.prefix:
-            plugin_instance.append(self.prefix)
+class Client(object):
 
-        if use_node_id:
-          plugin_instance.append(self.node_id)
-        plugin_instance.append(context)
+    def __init__(self, addr, port, timeout=0.7):
+        self.addr = addr
+        self.port = port
+        self.timeout = timeout
+        self.sock = None
 
-        plugin_instance = ".".join(plugin_instance)
-        data = pprint.saferepr((value_type,plugin_instance,instance
-                               ,value,context))
-        collectd.debug("Dispatching: %s"%(data))
-
-        val = collectd.Values()
-        if self.host_name:
-            val.host = self.host_name
-        val.plugin = self.plugin_name
-        val.plugin_instance = plugin_instance
-        val.type = value_type
-        val.type_instance = instance.lower().replace('-', '_')
-        # HACK with this dummy dict in place JSON parsing works
-        # https://github.com/collectd/collectd/issues/716
-        val.meta = {'0': True}
-        val.values = [value, ]
-        val.dispatch()
-
-    def process_statistics(self, meta_stats, statistics, context, counters=None
-                           , counts=None, storage=None, booleans=None
-                           , percents=None, operations=None, config=None):
-        if counters is None:
-            counters = set()
-        if counts is None:
-            counts = set()
-        if storage is None:
-            storage = set()
-        if booleans is None:
-            booleans = set()
-        if percents is None:
-            percents = set()
-        if operations is None:
-            operations = set()
-        if config is None:
-            config = set()
-        for key, value in statistics.iteritems():
-            if key in counters:
-                value_type = "count"
-            elif key in counts:
-                value_type = "count"
-            elif key in booleans:
-                value_type = "boolean"
-                value = value.lower()
-                if value == "false" or value == "no" or value == "0" or value == "CLUSTER_DOWN":
-                    value = 0
-                else:
-                    value = 1
-            elif key in percents:
-                value_type = "percent"
-            elif key in storage:
-                value_type = "bytes"
-            elif key in operations:
-                value_type = "count"
-            elif key in config:
+    def connect(self):
+        s = None
+        for res in socket.getaddrinfo(self.addr, self.port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+            af, socktype, proto, canonname, sa = res
+            try:
+                s = socket.socket(af, socktype, proto)
+            except socket.error as msg:
+                s = None
                 continue
-            else:
-                try:
-                    float(value)
-                except ValueError:
-                    pass
-                else:
-                    # Log numeric values that aren't emitted
-                    stat_name = "%s.%s"%(context, key)
-
-                    collectd.info("Unused numeric stat: %s has value %s"%(
-                        stat_name, value))
-                    meta_stats["unknown_metrics"] += 1
+            try:
+                s.connect(sa)
+            except socket.error as msg:
+                s.close()
+                s = None
                 continue
+            break
 
-            self.submit(value_type, key, value, context)
+        if s is None:
+            raise ClientError(
+                "Could not connect to server at %s %s" % (self.addr, self.port))
 
-    def do_service_statistics(self, meta_stats, client, hosts):
-        counters = set(["uptime",])
+        self.sock = s
+        return self
 
-        counts = set([
-            "batch_queue"
-            , "batch_tree_count"
-            , "client_connections"
-            , "cluster_size"
-            , "delete_queue"
-            , "info_queue"
-            , "migrate_progress_recv"
-            , "migrate_progress_send"
-            , "migrate_rx_objs"
-            , "migrate_tx_objs"
-            , "objects"
-            , "ongoing_write_reqs"
-            , "partition_absent"
-            , "partition_actual"
-            , "partition_desync"
-            , "partition_object_count"
-            , "partition_ref_count"
-            , "partition_replica"
-            , "proxy_in_progress"
-            , "queue"
-            , "record_locks"
-            , "record_refs"
-            , "stat_evicted_objects_time"
-            , "sub-records"
-            , "tree_count"
-            , "waiting_transactions"
-            , "query_long_queue_size"
-            , "query_short_queue_size"
-        ])
+    def close(self):
+        if self.sock is not None:
+            self.sock.settimeout(None)
+            self.sock.close()
+            self.sock = None
 
-        booleans = set([
-            "cluster_integrity"
-            , "system_swapping"
-        ])
+    def auth(self, username, password, timeout=None):
 
-        percents = set([
-            "free-pct-disk"
-            , "free-pct-memory"
-            , "system_free_mem_pct"
-        ])
+        import bcrypt
 
-        storage = set([
-            "data-used-bytes-memory"
-            , "index-used-bytes-memory"
-            , "sindex-used-bytes-memory"
-            , "total-bytes-disk"
-            , "total-bytes-memory"
-            , "used-bytes-disk"
-            , "used-bytes-memory"
-        ])
+        credential = bcrypt.hashpw(password, SALT)
 
-        operations = set([
-            "aggr_scans_succeeded"
-            , "aggr_scans_failed"
-            , "basic_scans_failed"
-            , "basic_scans_succeeded"
-            , "batch_errors"
-            , "batch_index_initiate"
-            , "batch_index_complete"
-            , "batch_index_timeout"
-            , "batch_index_errors"
-            , "batch_index_unused_buffers"
-            , "batch_index_huge_buffers"
-            , "batch_index_created_buffers"
-            , "batch_index_destroyed_buffers"
-            , "batch_initiate"
-            , "batch_timeout"
-            , "err_duplicate_proxy_request"
-            , "err_out_of_space"
-            , "err_replica_non_null_node"
-            , "err_replica_null_node"
-            , "err_rw_cant_put_unique"
-            , "err_rw_pending_limit"
-            , "err_rw_request_not_found"
-            , "err_storage_queue_full"
-            , "err_sync_copy_null_master"
-            , "err_sync_copy_null_node"
-            , "err_tsvc_requests"
-            , "err_tsvc_requests_timeout"
-            , "err_write_fail_bin_exists"
-            , "err_write_fail_bin_name"
-            , "err_write_fail_bin_not_found"
-            , "err_write_fail_forbidden"
-            , "err_write_fail_generation"
-            , "err_write_fail_generation_xdr"
-            , "err_write_fail_incompatible_type"
-            , "err_write_fail_key_exists"
-            , "err_write_fail_key_mismatch"
-            , "err_write_fail_not_found"
-            , "err_write_fail_noxdr"
-            , "err_write_fail_parameter"
-            , "err_write_fail_prole_delete"
-            , "err_write_fail_prole_generation"
-            , "err_write_fail_prole_unknown"
-            , "err_write_fail_record_too_big"
-            , "err_write_fail_unknown"
-            , "fabric_msgs_rcvd"
-            , "fabric_msgs_sent"
-            , "heartbeat_received_foreign"
-            , "heartbeat_received_self"
-            , "migrate_msgs_recv"
-            , "migrate_msgs_sent"
-            , "migrate_num_incoming_accepted"
-            , "migrate_num_incoming_refused"
-            , "proxy_action"
-            , "proxy_initiate"
-            , "proxy_retry"
-            , "proxy_retry_new_dest"
-            , "proxy_retry_q_full"
-            , "proxy_retry_same_dest"
-            , "proxy_unproxy"
-            , "query_abort"
-            , "query_agg"
-            , "query_agg_abort"
-            , "query_agg_avg_rec_count"
-            , "query_agg_err"
-            , "query_agg_success"
-            , "query_avg_rec_count"
-            , "query_fail"
-            , "query_long_queue_full"
-            , "query_long_reqs"
-            , "query_long_running"
-            , "query_lookup_abort"
-            , "query_lookup_avg_rec_count"
-            , "query_lookup_err"
-            , "query_lookups"
-            , "query_lookup_success"
-            , "query_reqs"
-            , "query_short_queue_full"
-            , "query_short_reqs"
-            , "query_short_running"
-            , "query_success"
-            , "query_tracked"
-            , "read_dup_prole"
-            , "reaped_fds"
-            , "rw_err_ack_badnode"
-            , "rw_err_ack_internal"
-            , "rw_err_ack_nomatch"
-            , "rw_err_dup_cluster_key"
-            , "rw_err_dup_internal"
-            , "rw_err_dup_send"
-            , "rw_err_write_cluster_key"
-            , "rw_err_write_internal"
-            , "rw_err_write_send"
-            , "scans_active"
-            , "sindex_gc_activity_dur"
-            , "sindex_gc_garbage_cleaned"
-            , "sindex_gc_garbage_found"
-            , "sindex_gc_inactivity_dur"
-            , "sindex_gc_list_creation_time"
-            , "sindex_gc_list_deletion_time"
-            , "sindex_gc_locktimedout"
-            , "sindex_gc_objects_validated"
-            , "sindex_ucgarbage_found"
-            , "stat_cluster_key_err_ack_dup_trans_reenqueue"
-            , "stat_cluster_key_err_ack_rw_trans_reenqueue"
-            , "stat_cluster_key_partition_transaction_queue_count"
-            , "stat_cluster_key_prole_retry"
-            , "stat_cluster_key_regular_processed"
-            , "stat_cluster_key_transaction_reenqueue"
-            , "stat_cluster_key_trans_to_proxy_retry"
-            , "stat_deleted_set_objects"
-            , "stat_delete_success"
-            , "stat_duplicate_operation"
-            , "stat_evicted_objects"
-            , "stat_expired_objects"
-            , "stat_ldt_proxy"
-            , "stat_nsup_deletes_not_shipped"
-            , "stat_evicted_set_objects"
-            , "stat_proxy_errs"
-            , "stat_proxy_reqs"
-            , "stat_proxy_reqs_xdr"
-            , "stat_proxy_success"
-            , "stat_read_errs_notfound"
-            , "stat_read_errs_other"
-            , "stat_read_reqs"
-            , "stat_read_reqs_xdr"
-            , "stat_read_success"
-            , "stat_rw_timeout"
-            , "stat_slow_trans_queue_batch_pop"
-            , "stat_slow_trans_queue_pop"
-            , "stat_slow_trans_queue_push"
-            , "stat_write_errs"
-            , "stat_write_errs_notfound"
-            , "stat_write_errs_other"
-            , "stat_write_reqs"
-            , "stat_write_reqs_xdr"
-            , "stat_write_success"
-            , "stat_xdr_pipe_miss"
-            , "stat_xdr_pipe_writes"
-            , "stat_zero_bin_records"
-            , "storage_defrag_corrupt_record"
-            , "transactions"
-            , "tscan_aborted"
-            , "tscan_initiate"
-            , "tscan_pending"
-            , "tscan_succeeded"
-            , "udf_bg_scans_succeeded"
-            , "udf_bg_scans_failed"
-            , "udf_delete_err_others"
-            , "udf_delete_reqs"
-            , "udf_delete_success"
-            , "udf_lua_errs"
-            , "udf_query_rec_reqs"
-            , "udf_read_errs_other"
-            , "udf_read_reqs"
-            , "udf_read_success"
-            , "udf_replica_writes"
-            , "udf_scan_rec_reqs"
-            , "udf_write_err_others"
-            , "udf_write_reqs"
-            , "udf_write_success"
-            , "write_master"
-            , "write_prole"
-        ])
+        if timeout is None:
+            timeout = self.timeout
 
-        try:
-            _, (_, statistics) = client.info("statistics", hosts=hosts).items()[0]
-        except (TimeoutError, ClientError):
-            collectd.warning('WARNING: TimeoutError executing info("statistics")')
-            meta_stats["timeouts"] += 1
+        l = 8 + 16
+        l += 4 + 1 + len(username)
+        l += 4 + 1 + len(credential)
+
+        buf = create_string_buffer(l)
+        offset = 0
+
+        proto = (MSG_VERSION << 56) | (MSG_TYPE << 48) | (l - 8)
+        STRUCT_PROTO.pack_into(buf, offset, proto)
+        offset += STRUCT_PROTO.size
+
+        STRUCT_AUTH.pack_into(buf, offset, AUTHENTICATE, 2)
+        offset += STRUCT_AUTH.size
+
+        STRUCT_FIELD.pack_into(buf, offset, len(username) + 1, USER)
+        offset += STRUCT_FIELD.size
+        fmt = "! %ds" % len(username)
+        struct.pack_into(fmt, buf, offset, username)
+        offset += len(username)
+
+        STRUCT_FIELD.pack_into(buf, offset, len(credential) + 1, CREDENTIAL)
+        offset += STRUCT_FIELD.size
+        fmt = "! %ds" % len(credential)
+        struct.pack_into(fmt, buf, offset, credential)
+        offset += len(credential)
+
+        self.send(buf)
+
+        buf = self.recv(8, timeout)
+        rv = STRUCT_PROTO.unpack(buf)
+        proto = rv[0]
+        pvers = (proto >> 56) & 0xFF
+        ptype = (proto >> 48) & 0xFF
+        psize = (proto & 0xFFFFFFFFFFFF)
+
+        buf = self.recv(psize, timeout)
+        status = ord(buf[1])
+
+        if status != 0:
+            raise ClientError("Autentication Error %d for '%s' " %
+                              (status, username))
+
+    def send(self, data):
+        if self.sock:
+            try:
+                r = self.sock.sendall(data)
+            except IOError as e:
+                raise ClientError(e)
+            except socket.error as e:
+                raise ClientError(e)
         else:
-            statistics = info_to_dict(statistics)
-            self.process_statistics(meta_stats
-                                    , statistics
-                                    , "service"
-                                    , counters=counters
-                                    , counts=counts
-                                    , storage=storage
-                                    , booleans=booleans
-                                    , percents=percents
-                                    , operations=operations)
+            raise ClientError('socket not available')
 
-    def do_namespace_statistics(self, meta_stats, client, hosts, namespaces):
-        counters = set([
-            "available-bin-names"
-            , "current-time"
-            , "max-evicted-ttl"
-            , "max-void-time"
-            , "obj-size-hist-max"
-        ])
+    def send_request(self, request, pvers=2, ptype=1):
+        if request:
+            request += '\n'
+        sz = len(request) + 8
+        buf = create_string_buffer(len(request) + 8)
+        offset = 0
 
-        counts = set([
-            "master-objects"
-            , "master-sub-objects"
-            , "non-expirable-objects"
-            , "nsup-cycle-duration"
-            , "objects"
-            , "prole-objects"
-            , "prole-sub-objects"
-            , "repl-factor"
-            , "sub-objects"
-        ])
+        proto = (pvers << 56) | (ptype << 48) | len(request)
+        STRUCT_PROTO.pack_into(buf, offset, proto)
+        offset = STRUCT_PROTO.size
 
-        storage = set([
-            "data-used-bytes-memory"
-            , "index-used-bytes-memory"
-            , "sindex-used-bytes-memory"
-            , "total-bytes-disk"
-            , "total-bytes-memory"
-            , "used-bytes-disk"
-            , "used-bytes-memory"
-        ])
+        fmt = "! %ds" % len(request)
+        struct.pack_into(fmt, buf, offset, request)
+        offset = offset + len(request)
 
-        booleans = set([
-            "hwm-breached"
-            , "stop-writes"
-        ])
+        self.send(buf)
 
-        percents = set([
-            "available_pct"
-            , "cache-read-pct"
-            , "free-pct-disk"
-            , "free-pct-memory"
-            , "nsup-cycle-sleep-pct"
-        ])
-
-        operations = set([
-            "evicted-objects"
-            , "expired-objects"
-            , "ldt_deletes"
-            , "ldt_delete_success"
-            , "ldt_errors"
-            , "ldt_reads"
-            , "ldt_read_success"
-            , "ldt_updates"
-            , "ldt_writes"
-            , "ldt_write_success"
-            , "set-deleted-objects"
-            , "set-evicted-objects"
-        ])
-
-        config = set([
-            "max-write-cache"
-            , "defrag-startup-minimum"
-            , "ldt-page-size"
-            , "high-water-memory-pct"
-            , "memory-size"
-            , "max-ttl"
-            , "filesize"
-            , "min-avail-pct"
-            , "fsync-max-sec"
-            , "default-ttl"
-            , "cold-start-evict-ttl"
-            , "defrag-sleep"
-            , "write-smoothing-period"
-            , "stop-writes-pct"
-            , "defrag-queue-min"
-            , "post-write-queue"
-            , "high-water-disk-pct"
-            , "writethreads"
-            , "writecache"
-            , "evict-tenths-pct"
-            , "defrag-lwm-pct"
-            , "flush-max-ms"
-        ])
-
-        for namespace in namespaces:
-            command = "namespace/%s"%(namespace)
+    def recv(self, sz, timeout):
+        out = ""
+        pos = 0
+        start_time = time.time()
+        while pos < sz:
+            buf = None
             try:
-                _, (_, statistics) = client.info(command
-                                                 , hosts=hosts).items()[0]
-            except (TimeoutError, ClientError):
-                collectd.warning('WARNING: TimeoutError executing info("%s")'%(command))
-                meta_stats["timeouts"] += 1
-                continue
+                buf = self.sock.recv(sz)
+            except IOError as e:
+                raise ClientError(e)
+            if pos == 0:
+                out = buf
+            else:
+                out += buf
+            pos += len(buf)
+            if timeout and time.time() - start_time > timeout:
+                raise ClientError(socket.timeout())
+        return out
 
-            statistics = info_to_dict(statistics)
+    def recv_response(self, timeout=None):
+        buf = self.recv(8, timeout)
+        rv = STRUCT_PROTO.unpack(buf)
+        proto = rv[0]
+        pvers = (proto >> 56) & 0xFF
+        ptype = (proto >> 48) & 0xFF
+        psize = (proto & 0xFFFFFFFFFFFF)
 
-            self.process_statistics(meta_stats
-                                    , statistics
-                                    , "namespace.%s"%(namespace)
-                                    , counters=counters
-                                    , counts=counts
-                                    , storage=storage
-                                    , booleans=booleans
-                                    , percents=percents
-                                    , operations=operations
-                                    , config=config)
+        if psize > 0:
+            return self.recv(psize, timeout)
+        return ""
 
-    def do_dc_statistics(self, meta_stats, client, hosts, datacenters):
-        counters = set([
-           "xdr_dc_delete_ship_attempts"
-           , "xdr_dc_rec_ship_attempts"
-           , "xdr_dc_remote_ship_ok"
-        ])
-        counts = set([
-           "xdr_dc_size"
-           , "open_conn"
-           , "xdr_dc_recs_shipping"
-           , "xdr_dc_timelag"
-           , "latency_avg_ship_ema"
-           , "pool_conn"
-        ])
-        percents = set([
-           "est_ship_compression_pct"
-        ])
-        booleans = set([
-           "xdr_dc_state"
-        ])
-        storage = set([
-           "esmt_byes_put_compressed"
-        ])
-        for dc in datacenters:
-            command = "dc/%s"%(dc)
-            try:
-                _, (_, statistics) = client.info(command
-                                                 , hosts=hosts).items()[0]
-            except (TimeoutError, ClientError):
-                collectd.warning('WARNING: TimeoutError executing info("%s")'%(command))
-                meta_stats["timeouts"] += 1
-                continue
+    def info(self, request):
+        self.send_request(request)
+        res = self.recv_response(timeout=self.timeout)
+        out = re.split("\s+", res, maxsplit=1)
+        if len(out) == 2:
+            return out[1]
+        else:
+            raise ClientError("Failed to parse response: %s" % (res))
 
-            statistics = info_to_dict(statistics)
 
-            self.process_statistics(meta_stats
-                                    , statistics
-                                    , "namespace.%s"%(namespace)
-                                    , counters=counters
-                                    , counts=counts
-                                    , storage=storage
-                                    , booleans=booleans
-                                    , percents=percents)
+# =============================================================================
+#
+# Schema
+#
+# -----------------------------------------------------------------------------
 
-    def do_latency_statistics(self, meta_stats, client, hosts):
-        try:
-            _, (_, tdata) = client.info("latency:", hosts=hosts).items()[0]
-        except (TimeoutError, ClientError):
-            collectd.warning('WARNING: TimeoutError executing info("latency:")')
-            meta_stats["timeouts"] += 1
+
+class Schema(object):
+
+    def __init__(self, schema={}):
+        self.schema = schema
+        self.mappings = {}
+
+        for category, types in schema.iteritems():
+            for type, metrics in types.iteritems():
+                for i, metric in enumerate(metrics):
+                    self.register(category, type, metric)
+
+    def register(self, category, type, metric):
+        m = self.mappings
+        parts = metric.split(":", 2)
+        if len(parts) == 2:
+            name = parts[0]
+            mapping = dict(parse(parts[1], pairs()))
+
+            c = m.get(category, {})
+            t = c.get(type, {})
+            t[name] = mapping
+            c[type] = t
+            m[category] = c
+
+    def lookup(self, category, name, val):
+        types = self.schema[category] if category in self.schema else {}
+        for type, metrics in types.iteritems():
+            if any (m.startswith(name,0) for m in metrics):
+                yield type, self.value(name, category, val, type)
+
+    def value(self, name, cat, val, type):
+
+        if cat in self.mappings and type in self.mappings[cat] and name in self.mappings[cat][type]:
+            mapping = self.mappings[cat][type][name]
+            if val in mapping:
+                val = mapping[val]
+            elif '*' in mapping:
+                val = mapping['*']
+
+        if type == 'boolean':
+            val = 1 if bool(val) else 0
+
+        return val
+
+
+# =============================================================================
+#
+# Readers
+#
+# -----------------------------------------------------------------------------
+
+
+def cluster(client, config, meta, emit):
+    req = "services"
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        services = [parse(res, parser=seq())]
+        emit(meta, 'services', len(services), ['cluster'])
+
+    req = "services-alumni"
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        alumni = [parse(res, parser=seq())]
+        emit(meta, 'services-alumni', len(alumni), ['cluster'])
+
+
+def service(client, config, meta, emit):
+    req = "statistics"
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        entries = parse(res, parser=pairs())
+        for name, value in entries:
+            emit(meta, name, value, ['service'])
+
+
+def namespaces(client, config, meta, emit):
+    req = "namespaces"
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        namespaces = parse(res, parser=seq())
+        for name in namespaces:
+            namespace(client, config, meta, emit, name)
+
+
+def namespace(client, config, meta, emit, namespace):
+    req = "namespace/%s" % (namespace)
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        entries = parse(res, parser=pairs())
+        for name, value in entries:
+            emit(meta, name, value, ['namespace', namespace])
+
+
+def datacenters(client, config, meta, emit):
+
+    if config.get("enable-xdr", "false") == "false":
+        return
+
+    req = "get-dc-config"
+    res = None
+
+    try:
+        res = client.info(req)
+        if res is None or len(res) == 0:
             return
+    except ClientError as e:
+        # If this fails, then it likely means it is not Aerospike EE
+        # so we reduce this to a debug message
+        collectd.debug('Failed to execute info "%s" - %s' % (req, e))
+    else:
+        datacenters = parse(res, seq())
+        for entry in datacenters:
+            dc = dict(parse(entry, seq(entry=pair(), delim=':')))
+            datacenter(client, config, meta, emit, dc)
 
-        tdata = tdata.split(';')[:-1]
+
+def datacenter(client, config, meta, emit, dc):
+
+    req = "dc/%s" % (dc['DC_Name'])
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        entries = parse(res, parser=pairs())
+        for name, value in entries:
+            emit(meta, name, value, ['datacenter', dc['DC_Name']])
+
+
+def latency(client, config, meta, emit):
+    req = "latency:"
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        tdata = res.split(';')[:-1]
         while tdata != []:
             columns = tdata.pop(0)
             row = tdata.pop(0)
@@ -516,164 +552,179 @@ class AerospikePlugin(object):
 
             # Don't need TPS column name
             columns.pop(0)
-            tps_name = "%s_tps"%(hist_name)
-            tps_value = row.pop(0)
-
-            self.submit("count", tps_name, tps_value, "latency")
+            name = "%s_tps" % (hist_name)
+            value = row.pop(0)
+            emit(meta, name, value, ["latency"])
 
             while columns:
-                name = "%s_pct%s"%(hist_name, columns.pop(0))
+                name = "%s_pct%s" % (hist_name, columns.pop(0))
                 name = name.replace(">", "_gt_")
                 value = row.pop(0)
-                self.submit("percent", name, value, "latency")
+                emit(meta, name, value, ["latency"])
 
-    def do_cluster_statistics(self, meta_stats, client, hosts):
-      try:
-        _, (_, tservices) = client.info("services", hosts=hosts).items()[0]
-      except (TimeoutError, ClientError):
-        collectd.warning('WARNING: TimeoutError executing info("services")')
-        meta_stats["timeouts"] += 1
 
-      try:
-        _, (_, talumni) = client.info("services-alumni", hosts=hosts).items()[0]
-      except (TimeoutError, ClientError):
-        collectd.warning('WARNING: TimeoutError executing info("services-alumni")')
-        meta_stats["timeouts"] += 1
+# =============================================================================
+#
+# Plugin
+#
+# -----------------------------------------------------------------------------
 
-      if tservices and talumni:
-        services = tservices.split(";")
-        alumni = talumni.split(";")
+class Plugin(object):
 
-        self.submit("count", "services", len(services), "cluster")
-        self.submit("count", "services-alumni", len(alumni), "cluster")
+    def __init__(self, readers=[]):
 
-    def do_meta_statistics(self, meta_stats, context="meta"):
-        for key, value in meta_stats.iteritems():
-            name = "%s"%(key)
-            if isinstance(value, dict):
-                self.do_meta_statistics(value, context="%s.%s"%(context, name))
-            else:
-                self.submit("count", name, value, context)
+        self.plugin_name = PLUGIN_NAME
+        self.readers = readers
 
-    def get_all_statistics(self):
-        collectd.debug("AEROSPIKE PLUGIN COLLECTING STATS")
-        hosts = [(self.aerospike.host, self.aerospike.port)]
-        policy = {"timeout": self.timeout}
-        config = {"hosts":hosts, "policy":policy}
+        # configurable via collectd.conf
+        self.host = DEFAULT_HOST
+        self.port = DEFAULT_PORT
+        self.timeout = DEFAULT_TIMEOUT
+        self.schema_path = None
+        self.username = None
+        self.password = None
 
-        meta_stats = {"timeouts": 0
-                      , "unknown_metrics": 0}
+        # prefixing is not yet supported
+        # I personally think it is best to not do it in the plugin
+        # self.prefix = None
+        # self.host_name = None
 
-        client = aerospike.client(config)
-        try:
-            if self.aerospike.user:
-                client.connect(self.aerospike.user, self.aerospike.password)
-            else:
-                client.connect()
-        except (TimeoutError, ClientError):
-            collectd.warning('WARNING: ClientError unable to connect to Aerospike Node')
-            self.submit("count", "connection_failure", 1, "meta", use_node_id=False)
-            return
-        else:
-            self.submit("count", "connection_failure", 0, "meta", use_node_id=False)
-            # Get this Nodes ID
-            try:
-                _, (_, node_id) = client.info("node", hosts=hosts).items()[0]
-            except (TimeoutError, ClientError):
-                collectd.warning('WARNING: TimeoutError executing info("node")')
-                meta_stats["timeouts"] += 1
-            else:
-                self.node_id = node_id.strip()
-                self.do_service_statistics(meta_stats, client, hosts)
-
-                # Get list of namespaces
-                try:
-                    _, (_, namespaces) = client.info("namespaces"
-                                                     , hosts=hosts).items()[0]
-                except (TimeoutError, ClientError):
-                    collectd.warning('WARNING: TimeoutError executing info("namespaces")')
-                    meta_stats["timeouts"] += 1
-                else:
-                    namespaces = info_to_list(namespaces)
-                    self.do_namespace_statistics(meta_stats, client
-                                                 , hosts, namespaces)
-                # Get list of XDR targets
-                try:
-                    _, (_, dc_info) = client.info("get-dc-config"
-                                                     , hosts=hosts).items()[0]
-                except (TimeoutError, ClientError):  
-                    collectd.warning('WARNING: TimeoutError executing info("get-dc-config")')
-                    meta_stats["timeouts"] += 1
-                else:
-                    if dc_info:
-                        dcs = info_to_list(dc_info)
-                        self.do_dc_statistics(meta_stats, client
-                                                 , hosts, dcs)
-
-                self.do_latency_statistics(meta_stats, client, hosts)
-
-                self.do_cluster_statistics(meta_stats, client, hosts)
-            finally:
-                client.close()
-
-        self.do_meta_statistics(meta_stats)
+        # collected during runtime
+        self.node_id = None
+        self.schema = None
+        self.initialized = False
 
     def config(self, obj):
         for node in obj.children:
-            if node.key == "Host":
-                self.aerospike.host = node.values[0]
-            elif node.key == "Port":
-                self.aerospike.port = int(node.values[0])
-            elif node.key == "User":
-                self.aerospike.user = node.values[0]
-            elif node.key == "Password":
-                self.aerospike.password = node.values[0]
-            elif node.key == "Timeout":
-                self.timeout = int(node.values[0])
-            elif node.key == "Prefix":
-                self.prefix = node.values[0]
-            elif node.key == "HostNameOverride":
-                self.host_name = node.values[0]
+            if node.key == 'Host':
+                self.host = node.values[0]
+            elif node.key == 'Port':
+                self.port = int(node.values[0])
+            elif node.key == 'Timeout':
+                self.timeout = float(node.values[0])
+            elif node.key == 'User':
+                self.username = node.values[0]
+            elif node.key == 'Password':
+                self.password = node.values[0]
+            # elif node.key == 'Prefix':
+            #     self.prefix = node.values[0]
+            # elif node.key == 'HostNameOverride':
+            #     self.host_name = node.values[0]
+            elif node.key == 'Schema':
+                self.schema_path = node.values[0]
             else:
-                collectd.warning("%s: Unknown configuration key %s"%(
-                    self.plugin_name
-                    , node.key))
+                collectd.warning('%s: Unknown configuration key %s' % (
+                    self.plugin_name, node.key))
 
-def info_to_dict(value, delimiter=';'):
-    """
-    Simple function to convert string to dict
-    """
+    def setup(self):
 
-    stat_dict = {}
-    stat_param = itertools.imap(lambda sp: info_to_tuple(sp, "="),
-                                info_to_list(value, delimiter))
-    for g in itertools.groupby(stat_param, lambda x: x[0]):
+        if self.initialized:
+            return
+
+        if not self.schema_path:
+            if os.path.isfile(SCHEMA_LOCAL):
+                self.schema_path = SCHEMA_LOCAL
+            elif os.path.isfile(SCHEMA_INSTALLED):
+                self.schema_path = SCHEMA_INSTALLED
+            else:
+                collectd.warning('Failed to find schema: %s, %s' %
+                                 (SCHEMA_LOCAL, SCHEMA_INSTALLED))
+
+        if self.schema_path:
+            collectd.info('Aerospike Plugin: schema %s' % self.schema_path)
+            with open(self.schema_path) as schema_file:
+                self.schema = Schema(yaml.load(schema_file))
+
+        self.initialized = True
+
+    def emit(self, meta, name, value, context):
+        meta['emits'] += 1
+        category = context[0]
+
+        for type, value in self.schema.lookup(category, name, value):
+
+            val = collectd.Values()
+            val.plugin = self.plugin_name
+            val.plugin_instance = ".".join(context)
+            val.type = type
+            val.type_instance = name
+            # HACK with this dummy dict in place JSON parsing works
+            # https://github.com/collectd/collectd/issues/716
+            val.meta = {'0': True}
+            val.values = [value, ]
+            val.dispatch()
+
+            meta['writes'] += 1
+
+    def read(self):
+        addr = self.host
+        port = self.port
+        username = self.username
+        password = self.password
+        meta = Counter()
+        alive = 0
+
+        self.setup()
+
+        collectd.info("Aerospike Plugin: client %s:%s" % (addr, port))
+        client = Client(addr=addr, port=port)
+
         try:
-            value = [v[1] for v in g[1]]
-            value = ",".join(sorted(value))
-            stat_dict[g[0]] = value
-        except:
-            collectd.warning("WARNING: info_to_dict had problems parsing %s"%(
-                value))
-    return stat_dict
+            client.connect()
+            if username and password:
+                collectd.info('Aerospike Plugin: auth %s' % username)
+                status = client.auth(username, password)
 
-def info_colon_to_dict(value):
-    """
-    Simple function to convert colon separated string to dict
-    """
-    return info_to_dict(value, ':')
+        except ClientError as e:
+            collectd.warning('Failed to connect to %s:%s - %s' %
+                             (addr, port, e))
+            meta['failures'] += 1
+        else:
 
-def info_to_list(value, delimiter=";"):
-    return [s.strip() for s in re.split(delimiter, value)]
+            req = "node"
+            res = None
+            try:
+                res = client.info(req)
+            except ClientError as e:
+                collectd.warning(
+                    'Failed to execute info: "%s" - %s' % (req, e))
+            else:
+                self.node_id = res
 
-def info_to_tuple(value, delimiter=":"):
-    return tuple(info_to_list(value, delimiter))
+            req = "get-config"
+            res = None
+            try:
+                res = client.info(req)
+            except ClientError as e:
+                collectd.warning(
+                    'Failed to execute info: "%s" - %s' % (req, e))
+            else:
 
-def info_to_dc_names(value):
-    v = value.strip().split(';')
-    return [ s.split(':')[0].split('=')[1] for s in v ]
+                config = dict(parse(res, pairs()))
+
+                for reader in self.readers:
+                    reader(client, config, meta, self.emit)
+            alive = 1
+        finally:
+            client.close()
+
+        # record meta here.
+        collectd.info('Aerospike Plugin: %s' % str(meta))
+        self.emit(meta, 'emits', meta['emits'], ['meta'])
+        self.emit(meta, 'writes', meta['writes'], ['meta'])
+        self.emit(meta, 'timeouts', meta['timeouts'], ['meta'])
+        self.emit(meta, 'failures', meta['failures'], ['meta'])
+        self.emit(meta, 'alive', alive, ['meta'])
 
 
-as_plugin = AerospikePlugin()
-collectd.register_read(as_plugin.get_all_statistics)
-collectd.register_config(as_plugin.config)
+# =============================================================================
+
+plugin = Plugin(readers=[
+    cluster,
+    service,
+    namespaces,
+    datacenters,
+    latency,
+])
+collectd.register_read(plugin.read)
+collectd.register_config(plugin.config)
