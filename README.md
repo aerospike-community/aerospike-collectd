@@ -3,7 +3,7 @@ aerospike-collectd
 Aerospike plugin for collectd.
 
 Version 1.0 is not compatible with previous 0.x releases due to metrics being renamed.
-For the older releases. Please see the "master" branch.
+
 
 Install
 =======
