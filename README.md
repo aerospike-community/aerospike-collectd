@@ -2,6 +2,9 @@ aerospike-collectd
 ====================
 Aerospike plugin for collectd.
 
+Version 1.1 is compatible with Aerospike 3.9+.  
+Version 1.0.X is compatible with Aerospike up to 3.8.X.  
+
 Version 1.0 is not compatible with previous 0.x releases due to metrics being renamed.
 
 
@@ -15,7 +18,7 @@ sudo pip install -r requirements.txt
 Highlights from collectd.conf:
 
 ```
-TypesDB "/opt/collectd-plugins/aerospike_types.db"
+TypesDB  "/usr/share/collectd/types.db" "/opt/collectd-plugins/aerospike_types.db"
 
 <LoadPlugin python>
     Globals true
