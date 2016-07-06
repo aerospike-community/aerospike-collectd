@@ -135,7 +135,7 @@ service:
     - tsvc_queue
     - query_long_queue_size
     - query_short_queue_size
-    - xdr_actived_failed_node_sessions
+    - xdr_active_failed_node_sessions
     - xdr_active_link_down_sessions
     - xdr_ship_latency_avg
     - xdr_read_txnq_used
@@ -144,6 +144,7 @@ service:
 
   boolean:
     - cluster_integrity
+    - migrate_allowed
     - system_swapping
 
   percent:
@@ -182,7 +183,6 @@ service:
     - heartbeat_received_foreign
     - heartbeat_received_self
     - info_complete
-    - migrate_allowed
     - proxy_retry
     - query_long_running
     - query_short_running
@@ -296,7 +296,6 @@ namespace:
   boolean:
     - hwm_breached
     - stop_writes
-    - geo2dspherithin.strict
 
   percent:
     # Stats
