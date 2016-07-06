@@ -243,7 +243,8 @@ service:
 # ------------------------------------------------------------------------------
 namespace:
   
-  gauge:    
+  gauge:
+    # Stats
     - available_bin_names
     - current_time
     - ldc-gc-rate
@@ -266,7 +267,9 @@ namespace:
     - obj_size_hist_max
     - prole_objects
     - prole_sub_objects
-    - repl_factor
+    
+    # Configs
+    - repl-factor
     - sindex.num-partitions
     - sub_objects
     - storage-engine.defrag-sleep
@@ -278,13 +281,15 @@ namespace:
     - storage-engine.write-threads
 
   bytes:
+    # Stats
     - memory_used_bytes
     - memory_used_data_bytes
     - memory_used_index_bytes
     - memory_used_sindex_bytes
-    - total_bytes_disk
-    - total_bytes_memory
-    - used_bytes_disk
+    - device_total_bytes
+    - device_used_bytes
+    
+    # Configs
     - storage-engine.filesize
     - storage-engine.write-block-size
 
@@ -294,14 +299,15 @@ namespace:
     - geo2dspherithin.strict
 
   percent:
+    # Stats
     - available_pct
     - cache_read_pct
     - device_available_pct
     - device_free_pct
-    - device_total_bytes
-    - device_used_bytes
     - memory_free_pct
     - nsup_cycle_sleep_pct  
+    
+    # Configs
     - storage-engine.defrag-lwm-pct
     - storage-engine.min-avail-pct
 
