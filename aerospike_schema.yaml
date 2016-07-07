@@ -96,9 +96,15 @@ latency:
     - query_tps
 
   percent:
+    - read_pct_gt_1ms
+    - read_pct_gt_8ms
+    - read_pct_gt_64ms
     - reads_pct_gt_1ms
     - reads_pct_gt_8ms
     - reads_pct_gt_64ms
+    - write_pct_gt_1ms
+    - write_pct_gt_8ms
+    - write_pct_gt_64ms
     - writes_master_pct_gt_1ms
     - writes_master_pct_gt_8ms
     - writes_master_pct_gt_64ms
