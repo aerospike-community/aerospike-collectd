@@ -542,6 +542,12 @@ def latency(client, config, meta, emit):
         tdata = res.split(';')[:-1]
         while tdata != []:
             columns = tdata.pop(0)
+            # keep popping if there's a line with error
+            while columns.startswith('error'):
+                if tdata == []:
+                    # tdata is empty, return
+                    return
+                columns = tdata.pop(0)
             row = tdata.pop(0)
 
             hist_name, columns = columns.split(':', 1)
