@@ -87,7 +87,9 @@ cluster:
 latency:
   
   gauge:
+    - read_tps
     - reads_tps
+    - write_tps
     - writes_master_tps
     - proxy_tps
     - udf_tps
