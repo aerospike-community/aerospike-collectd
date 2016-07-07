@@ -391,7 +391,7 @@ class Schema(object):
     def lookup(self, category, name, val):
         types = self.schema[category] if category in self.schema else {}
         for type, metrics in types.iteritems():
-			# ignore dynamic `{NS}-` for latencies
+	    # ignore dynamic `{NS}-` for latencies
             shortname = re.sub('{.*}-','',name)
             if any(m.startswith(shortname, 0) for m in metrics):
                 yield type, self.value(name, category, val, type)
@@ -658,7 +658,8 @@ class Plugin(object):
             val.plugin = self.plugin_name
             val.plugin_instance = ".".join(context)
             val.type = type
-            val.type_instance = name
+            sanitized_name = re.sub('[{}]','',name)
+            val.type_instance = sanitized_name
             # HACK with this dummy dict in place JSON parsing works
             # https://github.com/collectd/collectd/issues/716
             val.meta = {'0': True}
