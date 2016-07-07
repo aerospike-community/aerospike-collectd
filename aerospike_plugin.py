@@ -391,9 +391,7 @@ class Schema(object):
     def lookup(self, category, name, val):
         types = self.schema[category] if category in self.schema else {}
         for type, metrics in types.iteritems():
-	    # ignore dynamic `{NS}-` for latencies
-            shortname = re.sub('{.*}-','',name)
-            if any(m.startswith(shortname, 0) for m in metrics):
+            if any(m.startswith(name, 0) for m in metrics):
                 yield type, self.value(name, category, val, type)
 
     def value(self, name, cat, val, type):
@@ -553,6 +551,15 @@ def latency(client, config, meta, emit):
             row = tdata.pop(0)
 
             hist_name, columns = columns.split(':', 1)
+
+            # parse dynamic metrics
+            shortname = re.sub('{.*}-','',hist_name)
+            match = re.match('{(.*)}',hist_name)
+            context = ["latency"]
+            if match:
+                namespace = match.groups()[0]
+                context.append(namespace)
+	
             columns = columns.split(',')
             row = row.split(',')
 
@@ -563,15 +570,15 @@ def latency(client, config, meta, emit):
 
             # Don't need TPS column name
             columns.pop(0)
-            name = "%s_tps" % (hist_name)
+            name = "%s_tps" % (shortname)
             value = row.pop(0)
-            emit(meta, name, value, ["latency"])
+            emit(meta, name, value, context)
 
             while columns:
-                name = "%s_pct%s" % (hist_name, columns.pop(0))
+                name = "%s_pct%s" % (shortname, columns.pop(0))
                 name = name.replace(">", "_gt_")
                 value = row.pop(0)
-                emit(meta, name, value, ["latency"])
+                emit(meta, name, value, context)
 
 
 # =============================================================================
@@ -658,8 +665,7 @@ class Plugin(object):
             val.plugin = self.plugin_name
             val.plugin_instance = ".".join(context)
             val.type = type
-            sanitized_name = re.sub('[{}]','',name)
-            val.type_instance = sanitized_name
+            val.type_instance = name
             # HACK with this dummy dict in place JSON parsing works
             # https://github.com/collectd/collectd/issues/716
             val.meta = {'0': True}
