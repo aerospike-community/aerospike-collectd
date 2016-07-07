@@ -190,6 +190,7 @@ service:
     - transaction_queue_used_pct        # renamed xdr_read_txnq_used_pct
     - xdr_read_active_avg_pct
     - xdr_read_idle_avg_pct
+    - xdr_read_reqq_used_pct
     - xdr_read_txnq_used_pct
     - xdr_ship_compression_avg_pct
 
@@ -407,7 +408,6 @@ service:
     - xdr_read_latency_avg
     - xdr_read_not_found
     - xdr_read_reqq_used
-    - xdr_read_reqq_used_pct
     - xdr_read_respq_used
     - xdr_read_success
     - xdr_relogged_incoming
