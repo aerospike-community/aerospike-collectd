@@ -626,9 +626,9 @@ namespace:
     - udf_sub_tsvc_error
     - udf_sub_tsvc_timeout
     - xdr_read_success
-	- xdr_write_error
+    - xdr_write_error
     - xdr_write_success
-	- xdr_write_timeout
+    - xdr_write_timeout
 
 # ==============================================================================
 # Datacenter (XDR) specific metrics recorded per datacenter
