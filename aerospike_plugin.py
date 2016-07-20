@@ -391,7 +391,7 @@ class Schema(object):
     def lookup(self, category, name, val):
         types = self.schema[category] if category in self.schema else {}
         for type, metrics in types.iteritems():
-            if any(m.startswith(name, 0) for m in metrics):
+            if any(m == name) for m in metrics):
                 yield type, self.value(name, category, val, type)
 
     def value(self, name, cat, val, type):
