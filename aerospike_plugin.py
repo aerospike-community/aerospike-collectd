@@ -391,8 +391,9 @@ class Schema(object):
     def lookup(self, category, name, val):
         types = self.schema[category] if category in self.schema else {}
         for type, metrics in types.iteritems():
-            if any(m == name) for m in metrics):
-                yield type, self.value(name, category, val, type)
+            for m in metrics:
+                if m == name:
+                    yield type, self.value(name, category, val, type)
 
     def value(self, name, cat, val, type):
 
@@ -559,7 +560,6 @@ def latency(client, config, meta, emit):
             if match:
                 namespace = match.groups()[0]
                 context.append(namespace)
-	
             columns = columns.split(',')
             row = row.split(',')
 
@@ -658,9 +658,7 @@ class Plugin(object):
     def emit(self, meta, name, value, context):
         meta['emits'] += 1
         category = context[0]
-
         for type, value in self.schema.lookup(category, name, value):
-
             val = collectd.Values()
             val.plugin = self.plugin_name
             val.plugin_instance = ".".join(context)
