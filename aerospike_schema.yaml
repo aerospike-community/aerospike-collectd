@@ -362,7 +362,7 @@ service:
     - stat_recs_linkdown_processed    # renamed dlog_processed_link_down
     - stat_recs_logged        # renamed dlog_logged
     - stat_recs_logged_master
-    - stat_recs_outstandinga    # renamed xdr_outstanding_objects
+    - stat_recs_outstanding    # renamed xdr_ship_outstanding_objects
     - stat_recs_relogged        # renamed dlog_relogged
     - stat_recs_relogged_incoming    # renamed xdr_relogged_incoming
     - stat_recs_relogged_outgoing    # renamed xdr_relogged_outgoing
@@ -410,7 +410,6 @@ service:
     - xdr_deletes_shipped    # renamed xdr_ship_delete_success
     - xdr_hotkey_fetch
     - xdr_hotkey_skip
-    - xdr_outstanding_objects
     - xdr_queue_overflow_error
     - xdr_read_error
     - xdr_read_latency_avg
@@ -425,6 +424,7 @@ service:
     - xdr_ship_destination_error
     - xdr_ship_inflight_objects
     - xdr_ship_fullrecord
+    - xdr_ship_outstanding_objects
     - xdr_ship_source_error
     - xdr_ship_success
     - xdr_uninitialized_destination_error
