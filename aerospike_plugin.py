@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # ------------------------------------------------------------------------------
-# Copyright 2012-2016 Aerospike, Inc.
+# Copyright 2012-2017 Aerospike, Inc.
 #
 # Portions may be licensed to Aerospike, Inc. under one or more contributor
 # license agreements.
@@ -207,7 +207,8 @@ class Client(object):
         self.timeout = timeout
         self.sock = None
 
-    def connect(self):
+    def connect(self, keyfile=None, certfile=None, ca_certs=None, ciphers=None, tls_enable=False, encrypt_only=False,
+        capath=None, protocols=None, cert_blacklist=None, crl_check=False, crl_check_all=False, tls_name=None):
         s = None
         for res in socket.getaddrinfo(self.addr, self.port, socket.AF_UNSPEC, socket.SOCK_STREAM):
             af, socktype, proto, canonname, sa = res
@@ -216,11 +217,23 @@ class Client(object):
             except socket.error as msg:
                 s = None
                 continue
+            if tls_enable:
+                from ssl_context import SSLContext
+                from OpenSSL import SSL
+                ssl_context = SSLContext(enable_tls=tls_enable, encrypt_only=encrypt_only, cafile=ca_certs, capath=capath,
+                       keyfile=keyfile, certfile=certfile, protocols=protocols,
+                       cipher_suite=ciphers, cert_blacklist=cert_blacklist,
+                       crl_check=crl_check, crl_check_all=crl_check_all).ctx
+                s = SSL.Connection(ssl_context,s)
             try:
                 s.connect(sa)
+                if ssl_context:
+                    s.set_app_data(tls_name)
+                    s.do_handshake()
             except socket.error as msg:
                 s.close()
                 s = None
+                collectd.warning("Connect Error" % msg)
                 continue
             break
 
@@ -601,6 +614,19 @@ class Plugin(object):
         self.schema_path = None
         self.username = None
         self.password = None
+        self.tls_enable = False
+        self.tls_keyfile = None
+        self.tls_certfile = None
+        self.tls_ca = None
+        self.tls_capath = None
+        self.tls_version = None
+        self.tls_cipher = None
+        self.encrypt_only = False
+        self.tls_protocols = None
+        self.tls_blacklist = None
+        self.tls_crlcheck = False
+        self.tls_crlcheckall = False
+        self.tls_name = None
 
         # prefixing is not yet supported
         # I personally think it is best to not do it in the plugin
@@ -614,6 +640,7 @@ class Plugin(object):
 
     def config(self, obj):
         for node in obj.children:
+            collectd.warning("Param: %s, Value %s"%(node.key, node.values[0]))
             if node.key == 'Host':
                 self.host = node.values[0]
             elif node.key == 'Port':
@@ -630,6 +657,32 @@ class Plugin(object):
             #     self.host_name = node.values[0]
             elif node.key == 'Schema':
                 self.schema_path = node.values[0]
+            elif node.key == 'TLSEnable':
+                self.tls_enable = node.values[0]
+            elif node.key == 'TLSKeyfile':
+                self.tls_keyfile = node.values[0]
+            elif node.key == 'TLSCertfile':
+                self.tls_certifile = node.values[0]
+            elif node.key == 'TLSCAFile':
+                self.tls_ca = node.values[0]
+            elif node.key == 'TLSCAPath':
+                self.tls_capath = node.values[0]
+            elif node.key == 'TLSVersion':
+                self.tls_version = node.values[0]
+            elif node.key == 'TLSCipher':
+                self.tls_cipher = node.values[0]
+            elif node.key == 'EncryptOnly':
+                self.encrypt_only = node.values[0]
+            elif node.key == 'TLSProtocols':
+                self.tls_protocols = node.values[0]
+            elif node.key == 'TLSBlacklist':
+                self.tls_blacklist == node.values[0]
+            elif node.key == 'TLSCRL':
+                self.tls_crlcheck == node.values[0]
+            elif node.key == 'TLSCRLCheck':
+                self.tls_crlcheckall == node.values[0]
+            elif node.key == 'TLSName':
+                self.tls_name = node.values[0]
             else:
                 collectd.warning('%s: Unknown configuration key %s' % (
                     self.plugin_name, node.key))
@@ -677,16 +730,29 @@ class Plugin(object):
         port = self.port
         username = self.username
         password = self.password
+        keyfile = self.tls_keyfile
+        certfile = self.tls_certfile
+        ca = self.tls_ca
+        ca_path = self.tls_capath
+        tls_enable = self.tls_enable
+        cipher = self.tls_cipher
+        protocols = self.tls_protocols
+        encrypt_only = self.encrypt_only
+        blacklist = self.tls_blacklist
+        crl_check = self.tls_crlcheck
+        crl_check_all = self.tls_crlcheckall
+        tls_name = self.tls_name
         meta = Counter()
         alive = 0
 
         self.setup()
 
         collectd.info("Aerospike Plugin: client %s:%s" % (addr, port))
-        client = Client(addr=addr, port=port)
+        client = Client(addr=addr, port=port,)
 
         try:
-            client.connect()
+            client.connect(keyfile=keyfile, certfile=certfile, ca_certs=ca,ciphers=cipher,tls_enable=tls_enable, encrypt_only=encrypt_only,
+                capath=ca_path, protocols=protocols, cert_blacklist=blacklist, crl_check=crl_check, crl_check_all=crl_check_all, tls_name=tls_name)
             if username and password:
                 collectd.info('Aerospike Plugin: auth %s' % username)
                 status = client.auth(username, password)

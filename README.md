@@ -61,3 +61,104 @@ To configure the username and password for authenticating the plugin, specify
     </Module>
 </Plugin>
 ```
+
+SSL/TLS Support
+===============
+
+If Aerospike is configured with SSL/TLS, then you will need to configure the 
+plugin with SSL/TLS as well. The plugin requires python pyOpenSSL to be installed:
+
+```
+pip install pyOpenSSL
+```
+
+SSL/TLS parameters are as follows:
+
+```
+<Plugin python>
+    ModulePath "/opt/collectd-plugins/"
+    Import "aerospike_plugin"
+
+    <Module aerospike_plugin>
+
+        Port "4333"
+        TLSEnable true
+        EncryptOnly false
+        TLSName "my.aerospike.server"
+#       TLSKeyfile ""
+#       TLSCertfile ""
+        TLSCAFile "/etc/ssl/rootCA.pem"
+#       TLSCAPath ""
+#       TLSCipher "ALL"
+#       TLSProtocols "all"
+#       TLSBlacklist ""
+#       TLSCRL true
+#       TLSCRLCheck true
+
+    </Module>
+</Plugin>
+```
+
+* **Port** - The secured port that Aerospike is listening on.
+* **TLSEnable** - **Required** for TLS. Enable TLS plugin. Default False.
+* **EncryptOnly** - Encrypt Only mode. Only this and `TLSEnable` needs to be set to true for EncryptOnly Mode. Default False
+* **TLSName** - The hostname on the server's certificate. Required for normal auth and mutual auth.
+* **TLSKeyfile** - The private key for your client cert. Required for mutual auth.
+* **TLSCertfile** - The certificate for your client. Required for mutual auth.
+* **TLSCAFile** - The CA root certificate, in case it's not installed. Required for self-signed certs.
+* **TLSCAPath** - The path to CA provided Certificate Revocation Lists.
+* **TLSCipher** - The TLS Ciphers to use. See https://www.openssl.org/docs/man1.0.1/apps/ciphers.html for list of available ciphers. Must agree with server.
+* **TLSProtocols** - The SSL/TLS protocols to use. 
+* **TLSBlacklist** - A file containing the serial numbers of blacklisted certificates.
+* **TLSCRL** - Check against CRLs
+* **TLSCRLCheck** - Check against all CRLs
+
+
+#### SSL/TLS Protocols
+Available protocols are:
+SSLv3, TLSv1, TLSv1.1, TLSv1.2
+
+To use any supported protocol, a special keyword `all` may be used.
+
+You can also include individual protocols by prepending a `+`, eg: `+TLSv1.1`.  
+You can also exclude individual protocols by prepending a '`', eg `-SSLv3`.
+
+
+### Examples
+
+To use Encrypt Only mode:
+
+```
+   ...
+    <Module aerospike_plugin>
+        Port "4333"
+        TLSEnable true
+        EncryptOnly false
+    </Module>
+```
+
+To use Server Side Authentication mode:
+
+```
+    <Module aerospike_plugin>
+        Port "4333"
+        TLSEnable true
+        EncryptOnly false
+        TLSName "my.aerospike.server"
+        TLSCAFile "/etc/ssl/rootCA.pem" # Optional. Required for self-signed certs
+    </Module>
+```
+
+To use Mutual Authentication mode:
+
+```
+    <Module aerospike_plugin>
+        Port "4333"
+        TLSEnable true
+        EncryptOnly false
+        TLSName "my.aerospike.server"
+        TLSKeyfile "/etc/ssl/my.key"
+        TLSCertfile "/etc/ssl/cert.pem"
+        TLSCAFile "/etc/ssl/rootCA.pem"
+    </Module>
+```

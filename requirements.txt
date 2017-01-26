@@ -3,3 +3,6 @@ collectd
 
 # Uncomment the following when using authentication
 #bcrypt
+
+# Uncomment the following when using SSL/TLS
+#pyOpenSSL
