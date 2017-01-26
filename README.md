@@ -105,13 +105,13 @@ SSL/TLS parameters are as follows:
 * **TLSName** - The hostname on the server's certificate. Required for normal auth and mutual auth.
 * **TLSKeyfile** - The private key for your client cert. Required for mutual auth.
 * **TLSCertfile** - The certificate for your client. Required for mutual auth.
-* **TLSCAFile** - The CA root certificate, in case it's not installed. Required for self-signed certs.
-* **TLSCAPath** - The path to CA provided Certificate Revocation Lists.
+* **TLSCAFile** - **Required** The CA root certificate.
+* **TLSCAPath** - The path to CAs and/or Certificate Revocation Lists.
 * **TLSCipher** - The TLS Ciphers to use. See https://www.openssl.org/docs/man1.0.1/apps/ciphers.html for list of available ciphers. Must agree with server.
 * **TLSProtocols** - The SSL/TLS protocols to use. 
 * **TLSBlacklist** - A file containing the serial numbers of blacklisted certificates.
-* **TLSCRL** - Check against CRLs
-* **TLSCRLCheck** - Check against all CRLs
+* **TLSCRL** - Check against leaf certificates in the CRL chain.
+* **TLSCRLCheck** - Check against all certificates in the CRL chain.
 
 
 #### SSL/TLS Protocols
