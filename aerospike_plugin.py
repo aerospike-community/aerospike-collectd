@@ -212,7 +212,7 @@ class Client(object):
         s = None
         for res in socket.getaddrinfo(self.addr, self.port, socket.AF_UNSPEC, socket.SOCK_STREAM):
             af, socktype, proto, canonname, sa = res
-            ssl_context=False
+            ssl_context = None
             try:
                 s = socket.socket(af, socktype, proto)
             except socket.error as msg:
