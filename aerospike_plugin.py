@@ -530,7 +530,11 @@ def datacenters(client, config, meta, emit):
 
 def datacenter(client, config, meta, emit, dc):
 
-    req = "dc/%s" % (dc['DC_Name'])
+    try:
+        dcname = dc['DC_Name']
+    except:
+        dcname = dc['dc-name']
+    req = "dc/%s" % dcname
     res = None
 
     try:
@@ -541,7 +545,7 @@ def datacenter(client, config, meta, emit, dc):
     else:
         entries = parse(res, parser=pairs())
         for name, value in entries:
-            emit(meta, name, value, ['datacenter', dc['DC_Name']])
+            emit(meta, name, value, ['datacenter', dcname])
 
 
 def latency(client, config, meta, emit):
