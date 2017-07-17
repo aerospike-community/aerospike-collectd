@@ -555,6 +555,8 @@ def latency(client, config, meta, emit):
         meta['timeouts'] += 1
     else:
         res = res.strip()
+        if res.endswith(';'):
+            res=res[:-1] # 3.9+ releases stripped out a trailing ';'
         tdata = res.split(';')
         while tdata != []:
             columns = tdata.pop(0)
