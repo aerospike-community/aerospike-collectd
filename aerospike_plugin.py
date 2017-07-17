@@ -720,18 +720,22 @@ class Plugin(object):
         meta['emits'] += 1
         category = context[0]
         for type, value in self.schema.lookup(category, name, value):
-            val = collectd.Values()
-            val.plugin = self.plugin_name
-            val.plugin_instance = ".".join(context)
-            val.type = type
-            val.type_instance = name
-            # HACK with this dummy dict in place JSON parsing works
-            # https://github.com/collectd/collectd/issues/716
-            val.meta = {'0': True}
-            val.values = [value, ]
-            val.dispatch()
+            try:
+                val = collectd.Values()
+                val.plugin = self.plugin_name
+                val.plugin_instance = ".".join(context)
+                val.type = type
+                val.type_instance = name
+                # HACK with this dummy dict in place JSON parsing works
+                # https://github.com/collectd/collectd/issues/716
+                val.meta = {'0': True}
+                val.values = [value, ]
+                val.dispatch()
+                meta['writes'] += 1
+            except:
+                collectd.warning("Error sending data:")
+                collectd.warning("Category %s, Name %s, Value %s, Type %s"%(category,name,value,type))
 
-            meta['writes'] += 1
 
     def read(self):
         addr = self.host
