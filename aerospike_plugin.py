@@ -554,7 +554,8 @@ def latency(client, config, meta, emit):
         collectd.warning('Failed to execute info "%s" - %s' % (req, e))
         meta['timeouts'] += 1
     else:
-        tdata = res.split(';')[:-1]
+        res = res.strip()
+        tdata = res.split(';')
         while tdata != []:
             columns = tdata.pop(0)
             # keep popping if there's a line with error
