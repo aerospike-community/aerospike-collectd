@@ -135,16 +135,16 @@ service:
     - client_connections
     - delete_queue
     - fabric_connections
-	- fabric_bulk_send_rate
-	- fabric_bulk_recv_rate
-	- fabric_ctrl_send_rate
-	- fabric_ctrl_recv_rate
-	- fabric_meta_send_rate
-	- fabric_meta_recv_rate
-	- fabric_rw_send_rate
-	- fabric_rw_recv_rate
+    - fabric_bulk_send_rate
+    - fabric_bulk_recv_rate
+    - fabric_ctrl_send_rate
+    - fabric_ctrl_recv_rate
+    - fabric_meta_send_rate
+    - fabric_meta_recv_rate
+    - fabric_rw_send_rate
+    - fabric_rw_recv_rate
     - failednode_sessions_pending    # renamed xdr_actived_failed_node_sessions
-	- heap_site_count
+    - heap_site_count
     - heartbeat_connections
     - info_queue
     - latency_avg_dlogread
@@ -174,10 +174,10 @@ service:
     - stat_evicted_objects_time
     - sub-records     # renamed to sub_objects
     - sub_objects
-	- tombstones
+    - tombstones
     - total_recs_dlog
     - transaction_queue_used    # renamed xdr_read_txnq_used
-	- tree_gc_queue
+    - tree_gc_queue
     - tsvc_queue
     - used_recs_dlog    # renamed dlog_used_objects
     - tree_count
@@ -192,11 +192,11 @@ service:
     - xdr_read_txnq_used
     - xdr_throughput
     - xdr_timelag
-	- xdr_global_lastshiptime
+    - xdr_global_lastshiptime
 
   boolean:
     - cluster_integrity
-	- cluster_is_member
+    - cluster_is_member
     - migrate_allowed
     - system_swapping
 
@@ -205,7 +205,7 @@ service:
     - free-pct-disk
     - free-pct-memory
     - free_dlog_pct        # renamed dlog_free_pct
-	- heap_efficiency_pct
+    - heap_efficiency_pct
     - read_threads_avg_processing_time_pct        # renamed xdr_read_active_avg_pct
     - read_threads_avg_watiing_time_pct            # renamed xdr_read_idle_avg_pct
     - system_free_mem_pct
@@ -218,9 +218,9 @@ service:
 
   bytes:
     - data-used-bytes-memory
-	- heap_allocated_kbytes
-	- heap_active_kbytes
-	- heap_mapped_kbytes
+    - heap_allocated_kbytes
+    - heap_active_kbytes
+    - heap_mapped_kbytes
     - index-used-bytes-memory
     - sindex-used-bytes-memory        # moved to NS memory_used_sindex_bytes
     - total-bytes-disk
@@ -236,7 +236,7 @@ service:
     - batch_index_complete
     - batch_index_timeout
     - batch_index_error
-	- batch_index_queue
+    - batch_index_queue
     - batch_index_unused_buffers
     - batch_index_huge_buffers
     - batch_index_created_buffers
@@ -244,7 +244,7 @@ service:
     - batch_initiate
     - batch_timeout
     - dlog_logged
-	- dlog_overwritten_error
+    - dlog_overwritten_error
     - dlog_processed_link_down
     - dlog_processed_main
     - dlog_processed_replica
