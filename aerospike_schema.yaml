@@ -236,7 +236,6 @@ service:
     - batch_index_complete
     - batch_index_timeout
     - batch_index_error
-    - batch_index_queue
     - batch_index_unused_buffers
     - batch_index_huge_buffers
     - batch_index_created_buffers
