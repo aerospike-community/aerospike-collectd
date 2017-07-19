@@ -133,7 +133,6 @@ service:
     - batch_queue
     - batch_tree_count
     - client_connections
-    - cluster_size
     - delete_queue
     - fabric_connections
     - failednode_sessions_pending    # renamed xdr_actived_failed_node_sessions
