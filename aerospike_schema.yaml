@@ -521,6 +521,7 @@ namespace:
     - used-bytes-memory    # renamed memory_used_bytes
 
   boolean:
+    - hwm-breached
     - hwm_breached
     - stop_writes
 
@@ -591,7 +592,7 @@ namespace:
     - ldt_updates
     - ldt_writes
     - ldt_write_success
-    - migrate-recrod-receives
+    - migrate-record-receives
     - migrate_record_receives
     - migrate-record-retransmits
     - migrate_record_retransmits
