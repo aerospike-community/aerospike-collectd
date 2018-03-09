@@ -242,6 +242,7 @@ service:
     - batch_index_destroyed_buffers
     - batch_initiate
     - batch_timeout
+    - demarshal_error
     - dlog_logged
     - dlog_overwritten_error
     - dlog_processed_link_down
@@ -570,7 +571,6 @@ namespace:
     - client_write_error
     - client_write_success
     - client_write_timeout
-    - demarshal_error
     - evicted-objects
     - evicted_objects
     - evict_ttl
