@@ -143,14 +143,14 @@ service:
     - fabric_meta_recv_rate
     - fabric_rw_send_rate
     - fabric_rw_recv_rate
-    - failednode_sessions_pending    # renamed xdr_actived_failed_node_sessions
+    - failed_node_sessions_pending    # renamed xdr_actived_failed_node_sessions
     - heap_site_count
     - heartbeat_connections
     - info_queue
     - latency_avg_dlogread
     - latency_avg_dlogwrite
     - latency_avg_ship        # renamed xdr_ship_latency_avg
-    - linkdown_seesions_pending        # renamed xdr_active_link_down_sessions
+    - linkdown_sessions_pending        # renamed xdr_active_link_down_sessions
     - migrate_partitions_remaining
     - migrate_progress_recv        # moved to NS migrate_rx_partitions_active
     - migrate_progress_send        # moved to NS migrate_tx_partitions_active
