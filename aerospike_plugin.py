@@ -255,6 +255,8 @@ class Client(object):
 
         import bcrypt
 
+        if password == None:
+            password = ''
         credential = bcrypt.hashpw(password, SALT)
 
         if timeout is None:
@@ -765,7 +767,7 @@ class Plugin(object):
         try:
             client.connect(keyfile=keyfile, certfile=certfile, ca_certs=ca,ciphers=cipher,tls_enable=tls_enable, encrypt_only=encrypt_only,
                 capath=ca_path, protocols=protocols, cert_blacklist=blacklist, crl_check=crl_check, crl_check_all=crl_check_all, tls_name=tls_name)
-            if username and password:
+            if username:
                 collectd.info('Aerospike Plugin: auth %s' % username)
                 status = client.auth(username, password)
 
