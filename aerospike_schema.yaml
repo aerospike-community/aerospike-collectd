@@ -468,6 +468,7 @@ namespace:
     - current-time
     - current_time
     - dead_partitions
+    - effective_replication_factor
     - ldc-gc-rate
     - master-objects
     - master_objects
