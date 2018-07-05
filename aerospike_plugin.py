@@ -765,7 +765,7 @@ class Plugin(object):
         client = Client(addr=addr, port=port,)
 
         try:
-            client.connect(keyfile=keyfile, certfile=certfile, ca_certs=ca,ciphers=cipher,tls_enable=tls_enable, encrypt_only=encrypt_only,
+            client.connect(keyfile=keyfile, certfile=certfile, ca_certs=ca,ciphers=cipher,tls_enable=tls_enable, encrypt_only=encrypt_only, \
                 capath=ca_path, protocols=protocols, cert_blacklist=blacklist, crl_check=crl_check, crl_check_all=crl_check_all, tls_name=tls_name)
             if username:
                 collectd.info('Aerospike Plugin: auth %s' % username)
