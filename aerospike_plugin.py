@@ -234,7 +234,7 @@ class Client(object):
             except socket.error as msg:
                 s.close()
                 s = None
-                collectd.warning("Connect Error" % msg)
+                collectd.warning("Connect Error: %s" % msg)
                 continue
             break
 
