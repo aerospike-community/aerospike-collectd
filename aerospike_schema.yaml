@@ -464,7 +464,6 @@ namespace:
     - appeals_tx_remaining
     - available-bin-names
     - available_bin_names
-    - clock_skew_stop_writes
     - current-time
     - current_time
     - dead_partitions
@@ -531,6 +530,7 @@ namespace:
     - used-bytes-memory    # renamed memory_used_bytes
 
   boolean:
+    - clock_skew_stop_writes
     - hwm-breached
     - hwm_breached
     - stop_writes

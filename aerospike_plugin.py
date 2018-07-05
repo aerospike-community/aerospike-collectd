@@ -734,9 +734,10 @@ class Plugin(object):
                 val.values = [value, ]
                 val.dispatch()
                 meta['writes'] += 1
-            except:
+            except Exception as e:
                 collectd.warning("Error sending data:")
                 collectd.warning("Category %s, Name %s, Value %s, Type %s"%(category,name,value,type))
+                collectd.warning(str(e))
 
 
     def read(self):
