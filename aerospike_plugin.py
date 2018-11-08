@@ -388,7 +388,7 @@ class Schema(object):
 
         for category, types in schema.iteritems():
             for type, metrics in types.iteritems():
-                for i, metric in enumerate(metrics):
+                for _, metric in enumerate(metrics):
                     self.register(category, type, metric)
 
     def register(self, category, type, metric):
@@ -407,9 +407,8 @@ class Schema(object):
     def lookup(self, category, name, val):
         types = self.schema[category] if category in self.schema else {}
         for type, metrics in types.iteritems():
-            for m in metrics:
-                if m == name:
-                    yield type, self.value(name, category, val, type)
+            if name in metrics:
+                yield type, self.value(name, category, val, type)
 
     def value(self, name, cat, val, type):
 
@@ -721,13 +720,22 @@ class Plugin(object):
     def emit(self, meta, name, value, context):
         meta['emits'] += 1
         category = context[0]
-        for type, value in self.schema.lookup(category, name, value):
+        names = name.rsplit('.',1)    # new 4.3 metric schema: storage-engine.$device[X].$metric
+        metric = names.pop()
+        prefix = ""
+        plugin_instance = ".".join(context)
+        if names:
+            prefix = names.pop()
+            # intermediary schema is held in 'name' variable
+            # move intermediary up, since schema is hostname.pluging-plugin_instance.type-type_instance
+            plugin_instance += "."+prefix.replace('[','').replace(']','') 
+        for type, value in self.schema.lookup(category, metric, value):
             try:
                 val = collectd.Values()
                 val.plugin = self.plugin_name
-                val.plugin_instance = ".".join(context)
+                val.plugin_instance = plugin_instance
                 val.type = type
-                val.type_instance = name
+                val.type_instance = metric
                 # HACK with this dummy dict in place JSON parsing works
                 # https://github.com/collectd/collectd/issues/716
                 val.meta = {'0': True}
