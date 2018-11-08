@@ -133,7 +133,7 @@ To use Encrypt Only mode:
     <Module aerospike_plugin>
         Port "4333"
         TLSEnable true
-        EncryptOnly false
+        EncryptOnly true
     </Module>
 ```
 
