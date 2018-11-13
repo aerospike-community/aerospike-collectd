@@ -424,7 +424,8 @@ class Schema(object):
                 val = 0
             else:
                 val = 1
-
+        if name == "cluster_key":
+            val = int(val,16)
         return val
 
 

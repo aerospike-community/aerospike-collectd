@@ -130,6 +130,7 @@ service:
     - aggr_scans_succeded    # Moved to NS scan_aggr_complete
     - cluster_clock_skew
     - cluster_clock_skew_stop_writes_sec
+    - cluster_key
     - cluster_size
     - uptime
     - batch_queue
