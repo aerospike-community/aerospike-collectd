@@ -2,7 +2,9 @@ pyyaml
 collectd
 
 # Uncomment the following when using authentication
-#bcrypt
+# bcrypt
 
 # Uncomment the following when using SSL/TLS
-#pyOpenSSL
+# pyOpenSSL
+
+aerospike==3.7.1
