@@ -188,7 +188,7 @@ class Client(object):
 
     def __init__(self, addr, port, tls_enable=False, tls_name=None, tls_keyfile=None, tls_keyfile_pw=None, tls_certfile=None,
                  tls_cafile=None, tls_capath=None, tls_cipher=None, tls_protocols=None, tls_cert_blacklist=None,
-                 tls_crl_check=False, tls_crl_check_all=False, timeout=0.7):
+                 tls_crl_check=False, tls_crl_check_all=False, timeout=DEFAULT_TIMEOUT):
         self.addr = addr
         self.port = port
         self.tls_name = tls_name
@@ -495,6 +495,7 @@ class Plugin(object):
 
     def __init__(self, readers=[]):
 
+        self.client = None
         self.plugin_name = PLUGIN_NAME
         self.readers = readers
 
@@ -605,6 +606,40 @@ class Plugin(object):
 
         self.initialized = True
 
+    def init_client(self):
+
+        collectd.info("Aerospike Plugin: client %s:%s" % (self.host, self.port))
+        self.client = Client(addr=self.host, port=self.port, tls_enable=self.tls_enable, tls_name=self.tls_name,
+                        tls_keyfile=self.tls_keyfile, tls_keyfile_pw=self.tls_keyfile_pw, tls_certfile=self.tls_certfile,
+                        tls_cafile=self.tls_cafile, tls_capath=self.tls_capath, tls_cipher=self.tls_cipher,
+                        tls_protocols=self.tls_protocols, tls_cert_blacklist=self.tls_cert_blacklist,
+                        tls_crl_check=self.tls_crl_check, tls_crl_check_all=self.tls_crl_check_all, timeout=self.timeout)
+
+        try:
+            self.client.connect(username=self.username, password=self.password)
+
+        except ClientError as e:
+            if self.client:
+                self.client.close()
+                self.client = None
+            raise e
+
+    def init(self):
+        meta = Counter()
+        self.setup()
+
+        try:
+            self.init_client()
+        except ClientError as e:
+            collectd.warning('Failed to connect to %s:%s - %s' %
+                             (self.host, self.port, e))
+            meta['failures'] += 1
+
+    def shutdown(self):
+        if self.client:
+            self.client.close()
+            self.client = None
+
     def emit(self, meta, name, value, context):
         meta['emits'] += 1
         category = context[0]
@@ -635,59 +670,43 @@ class Plugin(object):
                 collectd.warning("Category %s, Name %s, Value %s, Type %s"%(category,name,value,type))
                 collectd.warning(str(e))
 
-
     def read(self):
-        addr = self.host
-        port = self.port
-
         meta = Counter()
         alive = 0
 
-        self.setup()
-
-        collectd.info("Aerospike Plugin: client %s:%s" % (addr, port))
-        client = Client(addr=addr, port=port, tls_enable=self.tls_enable, tls_name=self.tls_name,
-                        tls_keyfile=self.tls_keyfile, tls_keyfile_pw=self.tls_keyfile_pw, tls_certfile=self.tls_certfile,
-                        tls_cafile=self.tls_cafile, tls_capath=self.tls_capath, tls_cipher=self.tls_cipher,
-                        tls_protocols=self.tls_protocols, tls_cert_blacklist=self.tls_cert_blacklist,
-                        tls_crl_check=self.tls_crl_check, tls_crl_check_all=self.tls_crl_check_all, timeout=self.timeout)
-
         try:
-            client.connect(username=self.username, password=self.password)
+            if not self.client:
+                self.init_client()
 
         except ClientError as e:
             collectd.warning('Failed to connect to %s:%s - %s' %
-                             (addr, port, e))
+                             (self.host, self.port, e))
             meta['failures'] += 1
 
         else:
+            if self.client:
+                req = "node"
+                res = None
+                try:
+                    res = self.client.info(req)
+                except ClientError as e:
+                    collectd.warning('Failed to execute info: "%s" - %s' % (req, e))
+                else:
+                    self.node_id = res
 
-            req = "node"
-            res = None
-            try:
-                res = client.info(req)
-            except ClientError as e:
-                collectd.warning(
-                    'Failed to execute info: "%s" - %s' % (req, e))
-            else:
-                self.node_id = res
+                req = "get-config"
+                res = None
+                try:
+                    res = self.client.info(req)
+                except ClientError as e:
+                    collectd.warning('Failed to execute info: "%s" - %s' % (req, e))
+                else:
 
-            req = "get-config"
-            res = None
-            try:
-                res = client.info(req)
-            except ClientError as e:
-                collectd.warning(
-                    'Failed to execute info: "%s" - %s' % (req, e))
-            else:
+                    config = dict(parse(res, pairs()))
 
-                config = dict(parse(res, pairs()))
-
-                for reader in self.readers:
-                    reader(client, config, meta, self.emit)
-            alive = 1
-        finally:
-            client.close()
+                    for reader in self.readers:
+                        reader(self.client, config, meta, self.emit)
+                alive = 1
 
         # record meta here.
         collectd.info('Aerospike Plugin: %s' % str(meta))
@@ -707,5 +726,9 @@ plugin = Plugin(readers=[
     datacenters,
     latency,
 ])
-collectd.register_read(plugin.read)
+
+collectd.register_init(plugin.init)
 collectd.register_config(plugin.config)
+collectd.register_read(plugin.read)
+collectd.register_shutdown(plugin.shutdown)
+
