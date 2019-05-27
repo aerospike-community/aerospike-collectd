@@ -32,7 +32,7 @@ SCHEMA_INSTALLED = '/opt/collectd-plugins/aerospike_schema.yaml'
 
 DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 3000
-DEFAULT_TIMEOUT = 1000
+DEFAULT_TIMEOUT = 5
 
 # =============================================================================
 #
@@ -252,7 +252,7 @@ class Client(object):
             ],
 
             'policies': {
-                'timeout': self.timeout,
+                'timeout': self.timeout*1000,
                 'auth_mode': auth_mode
             },
 
