@@ -180,6 +180,36 @@ class Counter(dict):
 # -----------------------------------------------------------------------------
 
 
+class Enumeration(set):
+    def __getattr__(self, name):
+        if name in self:
+            return name
+        raise AttributeError
+
+    def __getitem__(self, name):
+        if name in self:
+            return name
+        raise AttributeError
+
+AuthMode = Enumeration([
+    # Use internal authentication only.  Hashed password is stored on the server.
+	# Do not send clear password. This is the default.
+
+	"INTERNAL",
+
+    # Use external authentication (like LDAP).  Specific external authentication is
+	# configured on server.  If TLS defined, send clear password on node login via TLS.
+	# Throw exception if TLS is not defined.
+
+	"EXTERNAL",
+
+    # Use external authentication (like LDAP).  Specific external authentication is
+	# configured on server.  Send clear password on node login whether or not TLS is defined.
+	# This mode should only be used for testing purposes because it is not secure authentication.
+
+	"EXTERNAL_INSECURE",
+])
+
 class ClientError(Exception):
     pass
 
@@ -188,7 +218,7 @@ class Client(object):
 
     def __init__(self, addr, port, tls_enable=False, tls_name=None, tls_keyfile=None, tls_keyfile_pw=None, tls_certfile=None,
                  tls_cafile=None, tls_capath=None, tls_cipher=None, tls_protocols=None, tls_cert_blacklist=None,
-                 tls_crl_check=False, tls_crl_check_all=False, timeout=DEFAULT_TIMEOUT):
+                 tls_crl_check=False, tls_crl_check_all=False, auth_mode=aerospike.AUTH_INTERNAL, timeout=DEFAULT_TIMEOUT):
         self.addr = addr
         self.port = port
         self.tls_name = tls_name
@@ -222,7 +252,8 @@ class Client(object):
             ],
 
             'policies': {
-                'timeout': self.timeout
+                'timeout': self.timeout,
+                'auth_mode': auth_mode
             },
 
             'tls': tls_config
@@ -507,6 +538,7 @@ class Plugin(object):
 
         self.username = None
         self.password = None
+        self.auth_mode = aerospike.AUTH_INTERNAL
 
         self.tls_enable = False
         self.tls_name = None
@@ -545,6 +577,11 @@ class Plugin(object):
                 self.username = node.values[0]
             elif node.key == 'Password':
                 self.password = node.values[0]
+            elif node.key == 'AuthMode':
+                if node.values[0] == AuthMode.EXTERNAL:
+                    self.auth_mode = aerospike.AUTH_EXTERNAL
+                elif node.values[0] == AuthMode.EXTERNAL_INSECURE:
+                    self.auth_mode = aerospike.AUTH_EXTERNAL_INSECURE
 
             # elif node.key == 'Prefix':
             #     self.prefix = node.values[0]
@@ -613,7 +650,8 @@ class Plugin(object):
                         tls_keyfile=self.tls_keyfile, tls_keyfile_pw=self.tls_keyfile_pw, tls_certfile=self.tls_certfile,
                         tls_cafile=self.tls_cafile, tls_capath=self.tls_capath, tls_cipher=self.tls_cipher,
                         tls_protocols=self.tls_protocols, tls_cert_blacklist=self.tls_cert_blacklist,
-                        tls_crl_check=self.tls_crl_check, tls_crl_check_all=self.tls_crl_check_all, timeout=self.timeout)
+                        tls_crl_check=self.tls_crl_check, tls_crl_check_all=self.tls_crl_check_all,
+                        auth_mode=self.auth_mode, timeout=self.timeout)
 
         try:
             self.client.connect(username=self.username, password=self.password)

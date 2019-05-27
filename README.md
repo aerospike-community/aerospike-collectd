@@ -47,7 +47,8 @@ pip install bcrypt
 ```
 
 To configure the username and password for authenticating the plugin, specify 
-`User` and `Password` in the configuration as follows.
+`User` and `Password` in the configuration as follows. `AuthMode` is optional 
+parameter to specify authentication mode. It's default value is INTERNAL.
 
 ```
 <Plugin python>
@@ -58,6 +59,7 @@ To configure the username and password for authenticating the plugin, specify
     <Module aerospike_plugin>
     	User "admin"
     	Password "admin"
+    	AuthMode "EXTERNAL"
     </Module>
 </Plugin>
 ```
