@@ -40,11 +40,7 @@ Authentication Support
 ======================
 
 If Aerospike is configured with authentication, then you will need to configure the
-plugin to authenticate. The plugin requires python bcrypt to be installed:
-
-```
-pip install bcrypt
-```
+plugin to authenticate.
 
 To configure the username and password for authenticating the plugin, specify 
 `User` and `Password` in the configuration as follows. `AuthMode` is optional 
@@ -68,11 +64,7 @@ SSL/TLS Support
 ===============
 
 If Aerospike is configured with SSL/TLS, then you will need to configure the 
-plugin with SSL/TLS as well. The plugin requires python pyOpenSSL to be installed:
-
-```
-pip install pyOpenSSL
-```
+plugin with SSL/TLS as well.
 
 SSL/TLS parameters are as follows:
 
