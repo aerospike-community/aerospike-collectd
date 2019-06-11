@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------------------
-# Copyright 2012-2017 Aerospike, Inc.
+# Copyright 2012-2019 Aerospike, Inc.
 #
 # Portions may be licensed to Aerospike, Inc. under one or more contributor
 # license agreements.
@@ -255,6 +255,8 @@ service:
     - dlog_used_objects
     - early_tsvc_batch_sub_error
     - early_tsvc_client_error
+    - early_tsvc_from_proxy_batch_sub_error
+    - early_tsvc_from_proxy_error
     - early_tsvc_udf_sub_error
     - err_duplicate_proxy_request
     - err_out_of_space    
@@ -471,6 +473,7 @@ namespace:
     - dead_partitions
     - defrag_q
     - effective_replication_factor
+    - evict_void_time
     - free_wblocks
     - ldc-gc-rate
     - master-objects
@@ -511,6 +514,7 @@ namespace:
     - prole-sub-objects
     - prole_sub_objects
     - shadow_write_q
+    - smd_evict_void_time
     - unavailable_partitions
     - write_q
     # Configs
@@ -599,6 +603,32 @@ namespace:
     - fail_key_busy
     - fail_record_too_big
     - fail_xdr_forbidden
+    - from_proxy_batch_sub_read_error
+    - from_proxy_batch_sub_read_not_found
+    - from_proxy_batch_sub_read_success
+    - from_proxy_batch_sub_read_timeout
+    - from_proxy_batch_sub_tsvc_error
+    - from_proxy_batch_sub_tsvc_timeout
+    - from_proxy_delete_error
+    - from_proxy_delete_not_found
+    - from_proxy_delete_success
+    - from_proxy_delete_timeout
+    - from_proxy_lang_delete_success
+    - from_proxy_lang_error
+    - from_proxy_lang_read_success
+    - from_proxy_lang_write_success
+    - from_proxy_read_error
+    - from_proxy_read_not_found
+    - from_proxy_read_success
+    - from_proxy_read_timeout
+    - from_proxy_tsvc_error
+    - from_proxy_tsvc_timeout
+    - from_proxy_udf_complete
+    - from_proxy_udf_error
+    - from_proxy_udf_timeout
+    - from_proxy_write_error
+    - from_proxy_write_success
+    - from_proxy_write_timeout
     - geo_region_query_cells
     - geo_region_query_falsepos
     - geo_region_query_points
@@ -644,6 +674,14 @@ namespace:
     - re_repl_error
     - re_repl_success
     - re_repl_timeout
+    - retransmit_all_read_dup_res
+    - retransmit_all_delete_dup_res
+    - retransmit_all_delete_repl_write
+    - retransmit_all_sub_dup_res
+    - retransmit_all_udf_dup_res
+    - retransmit_all_udf_repl_write
+    - retransmit_all_write_dup_res
+    - retransmit_all_write_repl_write
     - scan_aggr_complete
     - scan_aggr_error
     - scan_basic_abort
@@ -665,6 +703,20 @@ namespace:
     - udf_sub_tsvc_error
     - udf_sub_tsvc_timeout
     - writes
+    - xdr_client_delete_error
+    - xdr_client_delete_not_found
+    - xdr_client_delete_success
+    - xdr_client_delete_timeout
+    - xdr_client_write_error
+    - xdr_client_write_success
+    - xdr_client_write_timeout
+    - xdr_from_proxy_delete_error
+    - xdr_from_proxy_delete_not_found
+    - xdr_from_proxy_delete_success
+    - xdr_from_proxy_delete_timeout
+    - xdr_from_proxy_write_error
+    - xdr_from_proxy_write_success
+    - xdr_from_proxy_write_timeout
     - xdr_read_success
     - xdr_write_error
     - xdr_write_success
