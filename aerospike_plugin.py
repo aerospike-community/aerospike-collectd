@@ -20,15 +20,11 @@ __author__ = "Aerospike"
 __copyright__ = "Copyright 2019 Aerospike"
 __version__ = "1.1.6"
 
+import aerospike
 import collectd
 import os
 import re
-import socket
-import struct
-import time
 import yaml
-
-from ctypes import create_string_buffer
 
 
 PLUGIN_NAME = 'aerospike'
@@ -40,7 +36,7 @@ SCHEMA_INSTALLED = '/opt/collectd-plugins/aerospike_schema.yaml'
 
 DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 3000
-DEFAULT_TIMEOUT = 0.7
+DEFAULT_TIMEOUT = 5
 
 # =============================================================================
 #
@@ -187,17 +183,36 @@ class Counter(dict):
 #
 # -----------------------------------------------------------------------------
 
-STRUCT_PROTO = struct.Struct('! Q')
-STRUCT_AUTH = struct.Struct('! xxBB12x')
-STRUCT_FIELD = struct.Struct('! IB')
 
-MSG_VERSION = 0
-MSG_TYPE = 2
-AUTHENTICATE = 0
-USER = 0
-CREDENTIAL = 3
-SALT = "$2a$10$7EqJtq98hPqEX7fNZaFWoO"
+class Enumeration(set):
+    def __getattr__(self, name):
+        if name in self:
+            return name
+        raise AttributeError
 
+    def __getitem__(self, name):
+        if name in self:
+            return name
+        raise AttributeError
+
+AuthMode = Enumeration([
+    # Use internal authentication only.  Hashed password is stored on the server.
+	# Do not send clear password. This is the default.
+
+	"INTERNAL",
+
+    # Use external authentication (like LDAP).  Specific external authentication is
+	# configured on server.  If TLS defined, send clear password on node login via TLS.
+	# Throw exception if TLS is not defined.
+
+	"EXTERNAL",
+
+    # Use external authentication (like LDAP).  Specific external authentication is
+	# configured on server.  Send clear password on node login whether or not TLS is defined.
+	# This mode should only be used for testing purposes because it is not secure authentication.
+
+	"EXTERNAL_INSECURE",
+])
 
 class ClientError(Exception):
     pass
@@ -205,172 +220,69 @@ class ClientError(Exception):
 
 class Client(object):
 
-    def __init__(self, addr, port, timeout=0.7):
+    def __init__(self, addr, port, tls_enable=False, tls_name=None, tls_keyfile=None, tls_keyfile_pw=None, tls_certfile=None,
+                 tls_cafile=None, tls_capath=None, tls_cipher=None, tls_protocols=None, tls_cert_blacklist=None,
+                 tls_crl_check=False, tls_crl_check_all=False, auth_mode=aerospike.AUTH_INTERNAL, timeout=DEFAULT_TIMEOUT):
         self.addr = addr
         self.port = port
+        self.tls_name = tls_name
         self.timeout = timeout
-        self.sock = None
+        self.host = (self.addr, self.port)
+        if self.tls_name:
+            self.host = (self.addr, self.port, self.tls_name)
 
-    def connect(self, keyfile=None, certfile=None, ca_certs=None, ciphers=None, tls_enable=False, encrypt_only=False,
-        capath=None, protocols=None, cert_blacklist=None, crl_check=False, crl_check_all=False, tls_name=None):
-        s = None
-        for res in socket.getaddrinfo(self.addr, self.port, socket.AF_UNSPEC, socket.SOCK_STREAM):
-            af, socktype, proto, canonname, sa = res
-            ssl_context = None
-            try:
-                s = socket.socket(af, socktype, proto)
-            except socket.error as msg:
-                s = None
-                continue
-            if tls_enable:
-                from ssl_context import SSLContext
-                from OpenSSL import SSL
-                ssl_context = SSLContext(enable_tls=tls_enable, encrypt_only=encrypt_only, cafile=ca_certs, capath=capath,
-                       keyfile=keyfile, certfile=certfile, protocols=protocols,
-                       cipher_suite=ciphers, cert_blacklist=cert_blacklist,
-                       crl_check=crl_check, crl_check_all=crl_check_all).ctx
-                s = SSL.Connection(ssl_context,s)
-            try:
-                s.connect(sa)
-                if ssl_context:
-                    s.set_app_data(tls_name)
-                    s.do_handshake()
-            except socket.error as msg:
-                s.close()
-                s = None
-                collectd.warning("Connect Error: %s" % msg)
-                continue
-            break
+        tls_config = {
+            'enable': tls_enable
+        }
 
-        if s is None:
-            raise ClientError(
-                "Could not connect to server at %s %s" % (self.addr, self.port))
+        if tls_enable:
+            tls_config = {
+                'enable': tls_enable,
+                'keyfile': tls_keyfile,
+                'keyfile_pw': tls_keyfile_pw,
+                'certfile': tls_certfile,
+                'cafile': tls_cafile,
+                'capath': tls_capath,
+                'cipher_suite': tls_cipher,
+                'protocols': tls_protocols,
+                'cert_blacklist': tls_cert_blacklist,
+                'crl_check': tls_crl_check,
+                'crl_check_all': tls_crl_check_all
+            }
 
-        self.sock = s
-        return self
+        config = {
+            'hosts': [
+                self.host
+            ],
+
+            'policies': {
+                'timeout': self.timeout*1000,
+                'auth_mode': auth_mode
+            },
+
+            'tls': tls_config
+        }
+
+        self.asClient = aerospike.client(config)
+
+
+    def connect(self, username=None, password=None):
+        try:
+            self.asClient.connect(username, password)
+        except Exception as e:
+            raise ClientError("Could not connect to server at %s %s: %s" % (self.addr, self.port, str(e)))
 
     def close(self):
-        if self.sock is not None:
-            self.sock.settimeout(None)
-            self.sock.close()
-            self.sock = None
-
-    def auth(self, username, password, timeout=None):
-
-        import bcrypt
-
-        if password == None:
-            password = ''
-        credential = bcrypt.hashpw(password, SALT)
-
-        if timeout is None:
-            timeout = self.timeout
-
-        l = 8 + 16
-        l += 4 + 1 + len(username)
-        l += 4 + 1 + len(credential)
-
-        buf = create_string_buffer(l)
-        offset = 0
-
-        proto = (MSG_VERSION << 56) | (MSG_TYPE << 48) | (l - 8)
-        STRUCT_PROTO.pack_into(buf, offset, proto)
-        offset += STRUCT_PROTO.size
-
-        STRUCT_AUTH.pack_into(buf, offset, AUTHENTICATE, 2)
-        offset += STRUCT_AUTH.size
-
-        STRUCT_FIELD.pack_into(buf, offset, len(username) + 1, USER)
-        offset += STRUCT_FIELD.size
-        fmt = "! %ds" % len(username)
-        struct.pack_into(fmt, buf, offset, username)
-        offset += len(username)
-
-        STRUCT_FIELD.pack_into(buf, offset, len(credential) + 1, CREDENTIAL)
-        offset += STRUCT_FIELD.size
-        fmt = "! %ds" % len(credential)
-        struct.pack_into(fmt, buf, offset, credential)
-        offset += len(credential)
-
-        self.send(buf)
-
-        buf = self.recv(8, timeout)
-        rv = STRUCT_PROTO.unpack(buf)
-        proto = rv[0]
-        pvers = (proto >> 56) & 0xFF
-        ptype = (proto >> 48) & 0xFF
-        psize = (proto & 0xFFFFFFFFFFFF)
-
-        buf = self.recv(psize, timeout)
-        status = ord(buf[1])
-
-        if status != 0:
-            raise ClientError("Autentication Error %d for '%s' " %
-                              (status, username))
-
-    def send(self, data):
-        if self.sock:
-            try:
-                r = self.sock.sendall(data)
-            except IOError as e:
-                raise ClientError(e)
-            except socket.error as e:
-                raise ClientError(e)
-        else:
-            raise ClientError('socket not available')
-
-    def send_request(self, request, pvers=2, ptype=1):
-        if request:
-            request += '\n'
-        sz = len(request) + 8
-        buf = create_string_buffer(len(request) + 8)
-        offset = 0
-
-        proto = (pvers << 56) | (ptype << 48) | len(request)
-        STRUCT_PROTO.pack_into(buf, offset, proto)
-        offset = STRUCT_PROTO.size
-
-        fmt = "! %ds" % len(request)
-        struct.pack_into(fmt, buf, offset, request)
-        offset = offset + len(request)
-
-        self.send(buf)
-
-    def recv(self, sz, timeout):
-        out = ""
-        pos = 0
-        start_time = time.time()
-        while pos < sz:
-            buf = None
-            try:
-                buf = self.sock.recv(sz)
-            except IOError as e:
-                raise ClientError(e)
-            if pos == 0:
-                out = buf
-            else:
-                out += buf
-            pos += len(buf)
-            if timeout and time.time() - start_time > timeout:
-                raise ClientError(socket.timeout())
-        return out
-
-    def recv_response(self, timeout=None):
-        buf = self.recv(8, timeout)
-        rv = STRUCT_PROTO.unpack(buf)
-        proto = rv[0]
-        pvers = (proto >> 56) & 0xFF
-        ptype = (proto >> 48) & 0xFF
-        psize = (proto & 0xFFFFFFFFFFFF)
-
-        if psize > 0:
-            return self.recv(psize, timeout)
-        return ""
+        if self.asClient is not None:
+            self.asClient.close()
+            self.asClient = None
 
     def info(self, request):
-        self.send_request(request)
-        res = self.recv_response(timeout=self.timeout)
+        read_policies = {'total_timeout': self.timeout}
+
+        res = self.asClient.info_node(request, self.host, policy=read_policies)
         out = re.split("\s+", res, maxsplit=1)
+
         if len(out) == 2:
             return out[1]
         else:
@@ -618,6 +530,7 @@ class Plugin(object):
 
     def __init__(self, readers=[]):
 
+        self.client = None
         self.plugin_name = PLUGIN_NAME
         self.readers = readers
 
@@ -626,21 +539,23 @@ class Plugin(object):
         self.port = DEFAULT_PORT
         self.timeout = DEFAULT_TIMEOUT
         self.schema_path = None
+
         self.username = None
         self.password = None
+        self.auth_mode = aerospike.AUTH_INTERNAL
+
         self.tls_enable = False
-        self.tls_keyfile = None
-        self.tls_certfile = None
-        self.tls_ca = None
-        self.tls_capath = None
-        self.tls_version = None
-        self.tls_cipher = None
-        self.encrypt_only = False
-        self.tls_protocols = None
-        self.tls_blacklist = None
-        self.tls_crlcheck = False
-        self.tls_crlcheckall = False
         self.tls_name = None
+        self.tls_keyfile = None
+        self.tls_keyfile_pw = None
+        self.tls_certfile = None
+        self.tls_cafile = None
+        self.tls_capath = None
+        self.tls_cipher = None
+        self.tls_protocols = None
+        self.tls_cert_blacklist = None
+        self.tls_crl_check = False
+        self.tls_crl_check_all = False
 
         # prefixing is not yet supported
         # I personally think it is best to not do it in the plugin
@@ -661,28 +576,39 @@ class Plugin(object):
                 self.port = int(node.values[0])
             elif node.key == 'Timeout':
                 self.timeout = float(node.values[0])
+
             elif node.key == 'User':
                 self.username = node.values[0]
             elif node.key == 'Password':
                 self.password = node.values[0]
+            elif node.key == 'AuthMode':
+                if node.values[0] == AuthMode.EXTERNAL:
+                    self.auth_mode = aerospike.AUTH_EXTERNAL
+                elif node.values[0] == AuthMode.EXTERNAL_INSECURE:
+                    self.auth_mode = aerospike.AUTH_EXTERNAL_INSECURE
+
             # elif node.key == 'Prefix':
             #     self.prefix = node.values[0]
             # elif node.key == 'HostNameOverride':
             #     self.host_name = node.values[0]
+
             elif node.key == 'Schema':
                 self.schema_path = node.values[0]
+
             elif node.key == 'TLSEnable':
                 self.tls_enable = node.values[0]
+            elif node.key == 'TLSName':
+                self.tls_name = node.values[0]
             elif node.key == 'TLSKeyfile':
                 self.tls_keyfile = node.values[0]
+            elif node.key == 'TLSKeyfilePw':
+                self.tls_keyfile_pw = node.values[0]
             elif node.key == 'TLSCertfile':
-                self.tls_certifile = node.values[0]
+                self.tls_certfile = node.values[0]
             elif node.key == 'TLSCAFile':
-                self.tls_ca = node.values[0]
+                self.tls_cafile = node.values[0]
             elif node.key == 'TLSCAPath':
                 self.tls_capath = node.values[0]
-            elif node.key == 'TLSVersion':
-                self.tls_version = node.values[0]
             elif node.key == 'TLSCipher':
                 self.tls_cipher = node.values[0]
             elif node.key == 'EncryptOnly':
@@ -690,13 +616,12 @@ class Plugin(object):
             elif node.key == 'TLSProtocols':
                 self.tls_protocols = node.values[0]
             elif node.key == 'TLSBlacklist':
-                self.tls_blacklist == node.values[0]
-            elif node.key == 'TLSCRL':
-                self.tls_crlcheck == node.values[0]
+                self.tls_blacklist = node.values[0]
             elif node.key == 'TLSCRLCheck':
-                self.tls_crlcheckall == node.values[0]
-            elif node.key == 'TLSName':
-                self.tls_name = node.values[0]
+                self.tls_crl_check = node.values[0]
+            elif node.key == 'TLSCRLCheckAll':
+                self.tls_crl_check_all = node.values[0]
+
             else:
                 collectd.warning('%s: Unknown configuration key %s' % (
                     self.plugin_name, node.key))
@@ -721,6 +646,41 @@ class Plugin(object):
                 self.schema = Schema(yaml.load(schema_file))
 
         self.initialized = True
+
+    def init_client(self):
+
+        collectd.info("Aerospike Plugin: client %s:%s" % (self.host, self.port))
+        self.client = Client(addr=self.host, port=self.port, tls_enable=self.tls_enable, tls_name=self.tls_name,
+                        tls_keyfile=self.tls_keyfile, tls_keyfile_pw=self.tls_keyfile_pw, tls_certfile=self.tls_certfile,
+                        tls_cafile=self.tls_cafile, tls_capath=self.tls_capath, tls_cipher=self.tls_cipher,
+                        tls_protocols=self.tls_protocols, tls_cert_blacklist=self.tls_cert_blacklist,
+                        tls_crl_check=self.tls_crl_check, tls_crl_check_all=self.tls_crl_check_all,
+                        auth_mode=self.auth_mode, timeout=self.timeout)
+
+        try:
+            self.client.connect(username=self.username, password=self.password)
+
+        except ClientError as e:
+            if self.client:
+                self.client.close()
+                self.client = None
+            raise e
+
+    def init(self):
+        meta = Counter()
+        self.setup()
+
+        try:
+            self.init_client()
+        except ClientError as e:
+            collectd.warning('Failed to connect to %s:%s - %s' %
+                             (self.host, self.port, e))
+            meta['failures'] += 1
+
+    def shutdown(self):
+        if self.client:
+            self.client.close()
+            self.client = None
 
     def emit(self, meta, name, value, context):
         meta['emits'] += 1
@@ -752,71 +712,43 @@ class Plugin(object):
                 collectd.warning("Category %s, Name %s, Value %s, Type %s"%(category,name,value,type))
                 collectd.warning(str(e))
 
-
     def read(self):
-        addr = self.host
-        port = self.port
-        username = self.username
-        password = self.password
-        keyfile = self.tls_keyfile
-        certfile = self.tls_certfile
-        ca = self.tls_ca
-        ca_path = self.tls_capath
-        tls_enable = self.tls_enable
-        cipher = self.tls_cipher
-        protocols = self.tls_protocols
-        encrypt_only = self.encrypt_only
-        blacklist = self.tls_blacklist
-        crl_check = self.tls_crlcheck
-        crl_check_all = self.tls_crlcheckall
-        tls_name = self.tls_name
         meta = Counter()
         alive = 0
 
-        self.setup()
-
-        collectd.info("Aerospike Plugin: client %s:%s" % (addr, port))
-        client = Client(addr=addr, port=port,)
-
         try:
-            client.connect(keyfile=keyfile, certfile=certfile, ca_certs=ca,ciphers=cipher,tls_enable=tls_enable, encrypt_only=encrypt_only, \
-                capath=ca_path, protocols=protocols, cert_blacklist=blacklist, crl_check=crl_check, crl_check_all=crl_check_all, tls_name=tls_name)
-            if username:
-                collectd.info('Aerospike Plugin: auth %s' % username)
-                status = client.auth(username, password)
+            if not self.client:
+                self.init_client()
 
         except ClientError as e:
             collectd.warning('Failed to connect to %s:%s - %s' %
-                             (addr, port, e))
+                             (self.host, self.port, e))
             meta['failures'] += 1
+
         else:
+            if self.client:
+                req = "node"
+                res = None
+                try:
+                    res = self.client.info(req)
+                except ClientError as e:
+                    collectd.warning('Failed to execute info: "%s" - %s' % (req, e))
+                else:
+                    self.node_id = res
 
-            req = "node"
-            res = None
-            try:
-                res = client.info(req)
-            except ClientError as e:
-                collectd.warning(
-                    'Failed to execute info: "%s" - %s' % (req, e))
-            else:
-                self.node_id = res
+                req = "get-config"
+                res = None
+                try:
+                    res = self.client.info(req)
+                except ClientError as e:
+                    collectd.warning('Failed to execute info: "%s" - %s' % (req, e))
+                else:
 
-            req = "get-config"
-            res = None
-            try:
-                res = client.info(req)
-            except ClientError as e:
-                collectd.warning(
-                    'Failed to execute info: "%s" - %s' % (req, e))
-            else:
+                    config = dict(parse(res, pairs()))
 
-                config = dict(parse(res, pairs()))
-
-                for reader in self.readers:
-                    reader(client, config, meta, self.emit)
-            alive = 1
-        finally:
-            client.close()
+                    for reader in self.readers:
+                        reader(self.client, config, meta, self.emit)
+                alive = 1
 
         # record meta here.
         collectd.info('Aerospike Plugin: %s' % str(meta))
@@ -836,5 +768,9 @@ plugin = Plugin(readers=[
     datacenters,
     latency,
 ])
-collectd.register_read(plugin.read)
+
+collectd.register_init(plugin.init)
 collectd.register_config(plugin.config)
+collectd.register_read(plugin.read)
+collectd.register_shutdown(plugin.shutdown)
+
