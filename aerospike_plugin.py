@@ -16,6 +16,10 @@
 # the License.
 # ------------------------------------------------------------------------------
 
+__author__ = "Aerospike"
+__copyright__ = "Copyright 2019 Aerospike"
+__version__ = "1.1.6"
+
 import collectd
 import os
 import re
