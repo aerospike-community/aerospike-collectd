@@ -4,12 +4,52 @@ Aerospike plugin for collectd.
 
 Version 1.0 is not compatible with previous 0.x releases due to metrics being renamed.
 
+Features
+========
+- Service Level Stats (`asinfo -v "statistics"`)
+- Namespace Stats (`asinfo -v "namespace/NAMESPACE_NAME"`)
+- Latency Stats (`asinfo -v "latency:"`)
+- XDR Stats (`asinfo -v "statistics/xdr"`)
+- Can use Aerospike Security accounts
+
+Requirements
+============
+Additional python modules are required and installed using pip:
+```
+sudo pip install -r requirements.txt
+```
+
+See requirements.txt
 
 Install
 =======
 
+1. Clone the repository and place aerospike_types.db, aerospike_schema.yaml and aerospike_plugin.py somewhere accessible by collectd.
+  * This is `/opt/collectd-plugins` for all 3 files files in the example below.
+  * Ensure that `aerospike_plugin.py` is executable. (ie: chmod +x aerospike_plugin.py)
+2. Drop aerospike.conf into the `collectd.conf.d` directory (typically found at /etc/collectd/collectd.conf.d)
+or copy its contents into /etc/collectd/collectd.conf
+3. Reload/restart collectd
+4. Check that collectd is working fine:
+
 ```
-sudo pip install -r requirements.txt
+tail -f /var/log/syslog
+May 28 00:27:56 host1 collectd[21621]: Aerospike Plugin: client 127.0.0.1:3000
+May 28 00:27:56 host1 collectd[21621]: Aerospike Plugin: Counter({'writes': 262, 'emits': 318})
+May 28 00:28:06 host1 collectd[21621]: Aerospike Plugin: client 127.0.0.1:3000
+May 28 00:28:06 host1 collectd[21621]: Aerospike Plugin: Counter({'writes': 262, 'emits': 318})
+```
+
+Note: If you run into errors about types.db not defined:
+
+```
+collectd[21431]: plugin_dispatch_values: Dataset not found: memory (from "host1/memory/memory-used"), check your types.db!
+```
+
+Edit the `/etc/collectd/collectd.conf` file and explicitly add (uncomment) the default types:
+
+```
+TypesDB "/usr/share/collectd/types.db"
 ```
 
 Highlights from collectd.conf:
@@ -26,15 +66,14 @@ TypesDB  "/usr/share/collectd/types.db" "/opt/collectd-plugins/aerospike_types.d
     LogTraces true
     Interactive false
     Import "aerospike_plugin"
+    <Module aerospike_plugin>
+        Host   "127.0.0.1"
+        Port   3000
+        # Prefix "cluster_name"
+        # HostNameOverride "clusters.cluster_name.host_name"
+    </Module>
 </Plugin>
 ```
-
-Features
-========
-- Service Stats
-- Namespace Stats
-- Transaction Stats
-- XDR Stats
 
 Authentication Support
 ======================
@@ -101,7 +140,7 @@ SSL/TLS parameters are as follows:
 * **TLSCertfile** - The certificate for your client. Required for mutual auth.
 * **TLSCAFile** - **Required** The CA root certificate.
 * **TLSCAPath** - The path to CAs and/or Certificate Revocation Lists.
-* **TLSCipher** - The TLS Ciphers to use. See https://www.openssl.org/docs/man1.0.1/apps/ciphers.html for list of available ciphers. Must agree with server.
+* **TLSCipher** - The TLS Ciphers to use. See https://www.openssl.org/docs/man1.1.0/man1/ciphers.html for list of available ciphers. Must agree with server.
 * **TLSProtocols** - The SSL/TLS protocols to use. 
 * **TLSBlacklist** - A file containing the serial numbers of blacklisted certificates.
 * **TLSCRLCheck** - Check against leaf certificates in the CRL chain.
@@ -115,7 +154,7 @@ TLSv1, TLSv1.1, TLSv1.2
 To use any supported protocol, a special keyword `all` may be used.
 
 You can also include individual protocols by prepending a `+`, eg: `+TLSv1.1`.  
-You can also exclude individual protocols by prepending a `-`, eg `-TLSv1`.
+You can also exclude individual protocols by prepending a `-`, eg: `-TLSv1`.
 
 
 ### Examples
