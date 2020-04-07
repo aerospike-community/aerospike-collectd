@@ -182,3 +182,7 @@ To use Mutual Authentication mode:
         TLSCAFile "/etc/ssl/rootCA.pem"
     </Module>
 ```
+
+## Aerospike Cross-Datacenter Replication metrics not included
+
+This guide and version of the software does not include the Aerospike XDR metrics viewable at [Reference - XDR metrics](Https://www.aerospike.com/docs/operations/configure/cross-datacenter/index.html#reference---xdr-metrics).
