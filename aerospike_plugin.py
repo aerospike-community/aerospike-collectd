@@ -340,7 +340,7 @@ class Schema(object):
                 val = 0
             else:
                 val = 1
-        if name == "cluster_key":
+        if name == "cluster_key" or name == "cluster_principal" or name == "paxos_principal":
             val = int(val,16)
         return val
 
@@ -442,7 +442,7 @@ def datacenters(client, config, meta, emit):
     else:
         datacenters = parse(res, seq())
         for entry in datacenters:
-            dc = dict(parse(entry, seq(entry=pair(), delim=':')))
+            dc = dict(parse(entry, seq(delim=':', entry=pair())))
             datacenter(client, config, meta, emit, dc)
 
 
@@ -518,6 +518,82 @@ def latency(client, config, meta, emit):
                 name = name.replace(">", "_gt_")
                 value = row.pop(0)
                 emit(meta, name, value, context)
+
+def bins(client, config, meta, emit):
+    req = "bins"
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        bins = parse(res, seq())
+        for bin in bins:
+            namespace, metrics = bin.split(':')
+            entries = parse(metrics, seq(delim=',', entry=pair()))
+            for name, value in entries:
+                emit(meta, name, value, ['bins', namespace])
+
+def sets(client, config, meta, emit):
+    req = "sets"
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        sets = parse(res, seq())
+        collectd.info('Failed to execute info "%s" - %s' % (req, res))
+        for _set in sets:
+            entries = parse(_set, seq(delim=':', entry=pair()))
+            entries_dict = dict(
+                parse(_set, seq(delim=':', entry=pair())))
+            namespace = entries_dict['ns']
+            set_name = entries_dict['set']
+            for name, value in entries:
+                emit(meta, name, value, ['sets', namespace, set_name])
+
+def sindexes(client, config, meta, emit):
+    req = 'sindex'
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        sindexes = parse(res, seq())
+        for sidx in sindexes:
+            sidx = dict(parse(sidx,
+                                    seq(delim=':', entry=pair())))
+            sindex(client, config, meta, emit, sidx)
+
+
+def sindex(client, config, meta, emit, sidx):
+    namespace = sidx['ns']
+    index_name = sidx['indexname']
+
+    req = "sindex/%s/%s" % (namespace, index_name)
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        entries = parse(res, parser=pairs())
+        for name, value in entries:
+            emit(meta, name, value, ['sindex', namespace, index_name])
+
+
+
+        
 
 
 # =============================================================================
@@ -767,6 +843,9 @@ plugin = Plugin(readers=[
     namespaces,
     datacenters,
     latency,
+    bins,
+    sets,
+    sindexes
 ])
 
 collectd.register_init(plugin.init)
