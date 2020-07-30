@@ -219,7 +219,7 @@ service:
     - free-pct-memory
     - free_dlog_pct        # renamed dlog_free_pct
     - heap_efficiency_pct
-    - process_cpu_pct      # new in 4.7
+    - process_cpu_pct
     - read_threads_avg_processing_time_pct        # renamed xdr_read_active_avg_pct
     - read_threads_avg_waiting_time_pct            # renamed xdr_read_idle_avg_pct
     - system_free_mem_pct
@@ -811,7 +811,9 @@ namespace:
     - xdr_write_timeout
 
 # ==============================================================================
-# Datacenter (XDR) specific metrics recorded per datacenter
+# Datacenter (XDR) specific metrics recorded per datacenter 
+# Note: As of server 5.0 XDR metrics have their own XDR context and all these
+# metrics are deprecated.
 # ------------------------------------------------------------------------------
 
 # inline comments indicate moved/renamed metrics starting with ASD 3.9+
@@ -834,7 +836,7 @@ datacenter:
     - dc_ship_inflight_objects
     - dc_ship_latency_avg
     - dc_state:CLUSTER_DOWN=0;CLUSTER_UP=1;CLUSTER_WINDOW_SHIP=2;CLUSTER_INACTIVE=3
-  
+
   bytes:
     - dc_ship_bytes
     - dc_esmt_bytes_shipped    # renamed dc_ship_bytes
@@ -854,6 +856,37 @@ datacenter:
     - est_ship_compression_pct
     - dc_ship_idle_avg_pct
     - dc_esmt_ship_avg_comp_pct
+
+
+# ==============================================================================
+# XDR specific metrics.  New as of server 5.0.  Some metrics are new while
+# others are renamed/moved from namespace
+# ------------------------------------------------------------------------------
+
+xdr:
+  
+  gauge:
+  - compression_ratio
+  - lag
+  - latency_ms
+  - recoveries_pending
+
+  operations:
+  - abandoned
+  - filtered_out
+  - hot_keys
+  - in_progress
+  - in_queue
+  - lap_us
+  - not_found
+  - recoveries
+  - retry_conn_reset
+  - retry_dest
+  - success
+  - throughput
+
+  percent:
+  - uncompressed_pct
 
 
 # ==============================================================================

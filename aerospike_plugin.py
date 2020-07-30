@@ -52,7 +52,7 @@ def value():
         return input.strip()
     return parse
 
-
+# Creates pair from key1=val1 -> (key1, val1)
 def pair(delim='=', key=value(), value=value()):
     def parse(input):
         if input is None:
@@ -77,7 +77,7 @@ def seq(delim=';', entry=value()):
         return (entry(e) for e in input.strip().strip(delim).split(delim))
     return parse
 
-
+# Parses: key1=val1;key2=val2 -> (key1, val1), (key2, val2)
 def pairs():
     return seq(entry=pair())
 
@@ -425,10 +425,8 @@ def namespace(client, config, meta, emit, namespace):
 
 def datacenters(client, config, meta, emit):
 
-    if config.get("enable-xdr", "false") == "false":
-        return
-
-    req = "get-dc-config"
+    # Version 5.0+
+    req = "get-config:context=xdr"
     res = None
 
     try:
@@ -436,23 +434,46 @@ def datacenters(client, config, meta, emit):
         if res is None or len(res) == 0:
             return
     except ClientError as e:
-        # If this fails, then it likely means it is not Aerospike EE
-        # so we reduce this to a debug message
+        # If this fails, then it is either not EE edition or it is a pre 5.0 version.
         collectd.debug('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+
     else:
-        datacenters = parse(res, seq())
-        for entry in datacenters:
-            dc = dict(parse(entry, seq(delim=':', entry=pair())))
-            datacenter(client, config, meta, emit, dc)
+        dcs = dict(parse(res, seq(entry=pair())))
 
+        try:
+            # dcs was added at server 5.0
+            dcs = parse(dcs["dcs"], seq(delim=','))
+            for dc in dcs:
+                xdr(client, config, meta, emit, dc)
+        except:
+            # If this fails it is likely a server version pre 5.0
+            # Version pre 5.0
+            req = "get-dc-config"
+            res = None
 
+            try:
+                res = client.info(req)
+                if res is None or len(res) == 0:
+                    return
+            except ClientError as e:
+                # If this fails, then it likely means it is not Aerospike EE
+                # so we reduce this to a debug message
+                collectd.debug('Failed to execute info "%s" - %s' % (req, e))
+            else:
+                datacenters = parse(res, seq())
+                for entry in datacenters:
+                    dc = dict(parse(entry, seq(delim=':', entry=pair())))
+                    datacenter(client, config, meta, emit, dc)
+
+# For the old DC metrics prior to version 5.0
 def datacenter(client, config, meta, emit, dc):
 
     try:
-        dcname = dc['DC_Name']
+        dc_name = dc['DC_Name']
     except:
-        dcname = dc['dc-name']
-    req = "dc/%s" % dcname
+        dc_name = dc['dc-name']
+    req = "dc/%s" % dc_name
     res = None
 
     try:
@@ -463,8 +484,21 @@ def datacenter(client, config, meta, emit, dc):
     else:
         entries = parse(res, parser=pairs())
         for name, value in entries:
-            emit(meta, name, value, ['datacenter', dcname])
+            emit(meta, name, value, ['datacenter', dc_name])
 
+# For the new XDR metrics as of server version 5.0
+def xdr(client, config, meta, emit, dc_name):
+    req = "get-stats:context=xdr;dc=%s" % dc_name
+    res = None
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        entries = parse(res, seq(entry=pair()))
+        for name, value in entries:
+            emit(meta, name, value, ['xdr', dc_name])
 
 def latency(client, config, meta, emit):
     req = "latency:"
