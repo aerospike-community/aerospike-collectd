@@ -547,7 +547,6 @@ def sets(client, config, meta, emit):
         meta['timeouts'] += 1
     else:
         sets = parse(res, seq())
-        collectd.info('Failed to execute info "%s" - %s' % (req, res))
         for _set in sets:
             entries = parse(_set, seq(delim=':', entry=pair()))
             entries_dict = dict(
