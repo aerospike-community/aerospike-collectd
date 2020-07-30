@@ -2,14 +2,21 @@ aerospike-collectd
 ====================
 Aerospike plugin for collectd.
 
-Version 1.0 is not compatible with previous 0.x releases due to metrics being renamed.
+Compatibility
+=============
+Fully compatible with Aerospike Server 4.* - 5.0.0.11
+
+If you use a different server version you will likely have a few missing metrics but not many.
 
 Features
 ========
 - Service Level Stats (`asinfo -v "statistics"`)
 - Namespace Stats (`asinfo -v "namespace/NAMESPACE_NAME"`)
+- Set Stats (`asinfo -v "sets/NAMESPACE_NAME/SET_NAME"`)
+- Bin Stats (`asinfo -v "bins/NAMESPACE_NAME"`)
+- SIndex Stats (`asinfo -v "sindex/NAMESPACE_NAME"`)
 - Latency Stats (`asinfo -v "latency:"`)
-- XDR Stats (`asinfo -v "statistics/xdr"`)
+- XDR Stats (`asinfo -v "statistics/xdr"`) & (`asinfo -v "get-stats:context=xdr;dc=DCN_NAME`) 5.0+
 - Can use Aerospike Security accounts
 
 Requirements
