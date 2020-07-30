@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # ------------------------------------------------------------------------------
-# Copyright 2012-2019 Aerospike, Inc.
+# Copyright 2012-2020 Aerospike, Inc.
 #
 # Portions may be licensed to Aerospike, Inc. under one or more contributor
 # license agreements.
@@ -17,8 +17,8 @@
 # ------------------------------------------------------------------------------
 
 __author__ = "Aerospike"
-__copyright__ = "Copyright 2019 Aerospike"
-__version__ = "2.0.0"
+__copyright__ = "Copyright 2020 Aerospike"
+__version__ = "3.0.0"
 
 import aerospike
 import collectd
