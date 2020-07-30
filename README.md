@@ -4,9 +4,9 @@ Aerospike plugin for collectd.
 
 Compatibility
 =============
-Fully compatible with Aerospike Server 4.* - 5.0.0.11
+Fully compatible with Aerospike Server 4.0 - 5.0.0.11. Although, only tested on 4.9.0.11 and 5.0.0.11.
 
-If you use a different server version you will likely have a few missing metrics but not many.
+If you use a different server version it should work fine but could be missing a few metrics.
 
 Features
 ========
