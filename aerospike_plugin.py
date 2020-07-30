@@ -758,7 +758,8 @@ class Plugin(object):
         if self.schema_path:
             collectd.info('Aerospike Plugin: schema %s' % self.schema_path)
             with open(self.schema_path) as schema_file:
-                self.schema = Schema(yaml.load(schema_file))
+                self.schema = Schema(
+                    yaml.load(schema_file, Loader=yaml.SafeLoader))
 
         self.initialized = True
 
