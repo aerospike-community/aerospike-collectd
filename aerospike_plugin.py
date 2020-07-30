@@ -525,6 +525,8 @@ def bins(client, config, meta, emit):
 
     try:
         res = client.info(req)
+        if res is None or len(res) == 0:
+            return
     except ClientError as e:
         collectd.warning('Failed to execute info "%s" - %s' % (req, e))
         meta['timeouts'] += 1
@@ -542,6 +544,8 @@ def sets(client, config, meta, emit):
 
     try:
         res = client.info(req)
+        if res is None or len(res) == 0:
+            return
     except ClientError as e:
         collectd.warning('Failed to execute info "%s" - %s' % (req, e))
         meta['timeouts'] += 1
@@ -562,6 +566,8 @@ def sindexes(client, config, meta, emit):
 
     try:
         res = client.info(req)
+        if res is None or len(res) == 0:
+            return
     except ClientError as e:
         collectd.warning('Failed to execute info "%s" - %s' % (req, e))
         meta['timeouts'] += 1
