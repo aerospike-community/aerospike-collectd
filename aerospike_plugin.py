@@ -468,11 +468,9 @@ def datacenters(client, config, meta, emit):
 
 # For the old DC metrics prior to version 5.0
 def datacenter(client, config, meta, emit, dc):
+    
+    dc_name = dc['DC_Name'] if 'DC_Name' in dc else dc['dc-name']
 
-    try:
-        dc_name = dc['DC_Name']
-    except:
-        dc_name = dc['dc-name']
     req = "dc/%s" % dc_name
     res = None
 
