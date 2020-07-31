@@ -340,7 +340,7 @@ class Schema(object):
                 val = 0
             else:
                 val = 1
-        if name == "cluster_key" or name == "cluster_principal" or name == "paxos_principal":
+        if name in {"cluster_key", "cluster_principal", "paxos_principal"}:
             val = int(val,16)
         return val
 
@@ -468,7 +468,7 @@ def datacenters(client, config, meta, emit):
 
 # For the old DC metrics prior to version 5.0
 def datacenter(client, config, meta, emit, dc):
-    
+
     dc_name = dc['DC_Name'] if 'DC_Name' in dc else dc['dc-name']
 
     req = "dc/%s" % dc_name
@@ -606,8 +606,7 @@ def sindexes(client, config, meta, emit):
     else:
         sindexes = parse(res, seq())
         for sidx in sindexes:
-            sidx = dict(parse(sidx,
-                                    seq(delim=':', entry=pair())))
+            sidx = dict(parse(sidx, seq(delim=':', entry=pair())))
             sindex(client, config, meta, emit, sidx)
 
 
