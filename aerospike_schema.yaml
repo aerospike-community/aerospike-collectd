@@ -828,7 +828,7 @@ datacenter:
     - dc_http_locations
     - dc_http_good_locations
     - dc_latency_avg_ship    # renamed dc_ship_latency_avg
-    - dc_remote_ship_avg_sleepls |    # renamed dc_ship_idle_avg
+    - dc_remote_ship_avg_sleep    # renamed dc_ship_idle_avg
     - dc_open_conn                  # renamed dc_as_open_conn
     - dc_recs_inflight        # renamed dc_ship_inflight_objects
     - dc_size                 # renamed dc_as_size
