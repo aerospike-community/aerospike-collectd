@@ -38,6 +38,12 @@ DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 3000
 DEFAULT_TIMEOUT = 5
 
+# For units returned by latencies
+UNIT_MAP = {
+    'msec': 'ms',
+    'usec': 'us'
+}
+
 # =============================================================================
 #
 # Parsers
@@ -437,7 +443,6 @@ def datacenters(client, config, meta, emit):
         # If this fails, then it is either not EE edition or it is a pre 5.0 version.
         collectd.debug('Failed to execute info "%s" - %s' % (req, e))
         meta['timeouts'] += 1
-
     else:
         dcs = dict(parse(res, seq(entry=pair())))
 
@@ -498,7 +503,31 @@ def xdr(client, config, meta, emit, dc_name):
         for name, value in entries:
             emit(meta, name, value, ['xdr', dc_name])
 
+
 def latency(client, config, meta, emit):
+    req = 'build'
+    version = None
+
+    try:
+        version = client.info(req).split('.')
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+
+        if int(version[0]) > 5 or (int(version[0]) == 5 and int(version[1]) >= 1):
+            use_latencies(client, config, meta, emit)
+        else:
+            use_latency(client, config, meta, emit)
+
+'''
+Example latency response (pre 5.1):
+error-no-data-yet-or-back-too-small;{test}-read:20:52:11-GMT,ops/sec, \
+>1ms,>8ms,>64ms;20:52:21,46973.8,0.00,0.00,0.00;{test}-write:20:52:11-GMT, \
+ops/sec,>1ms,>8ms,>64ms;20:52:21,46968.7,0.00,0.00,0.00; \
+error-no-data-yet-or-back-too-small;error-no-data-yet-or-back-too-small; \
+'''
+def use_latency(client, config, meta, emit):
     req = "latency:"
     res = None
 
@@ -510,7 +539,7 @@ def latency(client, config, meta, emit):
     else:
         res = res.strip()
         if res.endswith(';'):
-            res=res[:-1] # 3.9+ releases stripped out a trailing ';'
+            res = res[:-1] # 3.9+ releases stripped out a trailing ';'
         tdata = res.split(';')
         while tdata != []:
             columns = tdata.pop(0)
@@ -525,8 +554,8 @@ def latency(client, config, meta, emit):
             hist_name, columns = columns.split(':', 1)
 
             # parse dynamic metrics
-            shortname = re.sub('{.*}-','',hist_name)
-            match = re.match('{(.*)}',hist_name)
+            shortname = re.sub('{.*}-', '', hist_name)
+            match = re.match('{(.*)}', hist_name)
             context = ["latency"]
             if match:
                 namespace = match.groups()[0]
@@ -549,6 +578,51 @@ def latency(client, config, meta, emit):
                 name = "%s_pct%s" % (shortname, columns.pop(0))
                 name = name.replace(">", "_gt_")
                 value = row.pop(0)
+                emit(meta, name, value, context)
+
+'''
+Example latencies response (5.1+) with variable metric units:
+batch-index:;{test}-read:usec,39550.9,100.00,100.00,100.00,81.61,59.74, \
+54.47,41.02,17.33,3.80,0.97,0.33,0.10,0.03,0.01,0.00,0.00,0.00;{test}-write: \
+usec,39539.9,100.00,100.00,100.00,94.33,63.22,56.92,46.06,22.15,5.02,1.21, \
+0.40,0.13,0.04,0.01,0.00,0.00,0.00;{test}-udf:;{test}-query:;{bar}-read:; \
+{bar}-write:;{bar}-udf:;{bar}-query:
+'''
+def use_latencies(client, config, meta, emit):
+    req = "latencies:"
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        res = res.strip()
+        data = res.split(';')
+
+        for histogram in data:
+            hist_name, hist_data = histogram.split(':')
+            
+            if hist_data is None or len(hist_data) == 0:
+                continue
+
+            hist_data = hist_data.split(',')
+            shortname = re.sub('{.*}-', '', hist_name)
+            match = re.match('{(.*)}', hist_name)
+            context = ["latency"]
+
+            if match:
+                namespace = match.groups()[0]
+                context.append(namespace)
+
+            unit = UNIT_MAP[hist_data.pop(0)]
+            name = "%s_tps" % (shortname)
+            value = hist_data.pop(0)
+            emit(meta, name, value, context)
+
+            for idx, value in enumerate(hist_data):
+                name = "%s_pct_gt_%s%s" % (shortname, 2**idx, unit)
                 emit(meta, name, value, context)
 
 def bins(client, config, meta, emit):
@@ -626,10 +700,6 @@ def sindex(client, config, meta, emit, sidx):
         entries = parse(res, parser=pairs())
         for name, value in entries:
             emit(meta, name, value, ['sindex', namespace, index_name])
-
-
-
-        
 
 
 # =============================================================================
@@ -798,7 +868,7 @@ class Plugin(object):
     def emit(self, meta, name, value, context):
         meta['emits'] += 1
         category = context[0]
-        names = name.rsplit('.',1)    # new 4.3 metric schema: storage-engine.$device[X].$metric
+        names = name.rsplit('.', 1)    # new 4.3 metric schema: storage-engine.$device[X].$metric
         metric = names.pop()
         prefix = ""
         plugin_instance = ".".join(context)
@@ -806,7 +876,7 @@ class Plugin(object):
             prefix = names.pop()
             # intermediary schema is held in 'name' variable
             # move intermediary up, since schema is hostname.pluging-plugin_instance.type-type_instance
-            plugin_instance += "."+prefix.replace('[','').replace(']','') 
+            plugin_instance += "." + prefix.replace('[', '').replace(']', '')
         for type, value in self.schema.lookup(category, metric, value):
             try:
                 val = collectd.Values()
@@ -822,7 +892,7 @@ class Plugin(object):
                 meta['writes'] += 1
             except Exception as e:
                 collectd.warning("Error sending data:")
-                collectd.warning("Category %s, Name %s, Value %s, Type %s"%(category,name,value,type))
+                collectd.warning("Category %s, Name %s, Value %s, Type %s"%(category, name, value, type))
                 collectd.warning(str(e))
 
     def read(self):
