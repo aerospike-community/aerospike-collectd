@@ -21,6 +21,7 @@ __copyright__ = "Copyright 2020 Aerospike"
 __version__ = "3.0.0"
 
 import aerospike
+from aerospike.exception import ServerError
 import collectd
 import os
 import re
@@ -437,7 +438,10 @@ def datacenters(client, config, meta, emit):
         # If this fails, then it is either not EE edition or it is a pre 5.0 version.
         collectd.debug('Failed to execute info "%s" - %s' % (req, e))
         meta['timeouts'] += 1
-
+    except ServerError as e:
+        # If this fails, cluster may not have xdr enabled at all.
+        collectd.info('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
     else:
         dcs = dict(parse(res, seq(entry=pair())))
 
