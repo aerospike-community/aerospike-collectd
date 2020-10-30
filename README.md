@@ -1,6 +1,9 @@
 # aerospike-collectd
 Aerospike plugin for collectd
 
+## Aerospike Monitoring Stack
+For monitoring and alerting you should consider using the Prometheus and Grafana based [Aerospike Monitoring Stack](https://github.com/aerospike/aerospike-monitoring). This is the monitoring solution being developed by Aerospike.
+
 ## Community Development
 This repository has been turned over to the community. If you wish to contribute code, go ahead and clone this repo, modify the code, and create a pull request.
 
