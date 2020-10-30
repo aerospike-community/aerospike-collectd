@@ -1,15 +1,17 @@
-aerospike-collectd
-====================
-Aerospike plugin for collectd.
+# aerospike-collectd
+Aerospike plugin for collectd
 
-Compatibility
-=============
+## Community Development
+This repository has been turned over to the community. If you wish to contribute code, go ahead and clone this repo, modify the code, and create a pull request.
+
+Active contributors can then ask to become maintainers for the repo. The wiki can similarly be modified by any code contributor who has been granted pull permissions.
+
+## Compatibility
 Fully compatible with Aerospike Server 4.0 - 5.1.0.7 Although, only tested on 4.9.0.11, 5.0.0.11, and 5.1.0.7.
 
 If you use a server version outside of 4.0 - 5.1.0.7 it should work fine but could be missing a few metrics.
 
-Features
-========
+## Features
 - Service Level Stats (`asinfo -v "statistics"`)
 - Namespace Stats (`asinfo -v "namespace/NAMESPACE_NAME"`)
 - Set Stats (`asinfo -v "sets/NAMESPACE_NAME/SET_NAME"`)
@@ -19,8 +21,7 @@ Features
 - XDR Stats (`asinfo -v "dc/DC_NAME"`) & (`asinfo -v "get-stats:context=xdr;dc=DC_NAME`) 5.0+
 - Can use Aerospike Security accounts
 
-Requirements
-============
+## Requirements
 Additional python modules are required and installed using pip:
 ```
 sudo pip install -r requirements.txt
@@ -28,8 +29,7 @@ sudo pip install -r requirements.txt
 
 See requirements.txt
 
-Install
-=======
+## Install
 
 1. Clone the repository and place aerospike_types.db, aerospike_schema.yaml and aerospike_plugin.py somewhere accessible by collectd.
   * This is `/opt/collectd-plugins` for all 3 files files in the example below.
@@ -82,8 +82,7 @@ TypesDB  "/usr/share/collectd/types.db" "/opt/collectd-plugins/aerospike_types.d
 </Plugin>
 ```
 
-Authentication Support
-======================
+## Authentication Support
 
 If Aerospike is configured with authentication, then you will need to configure the
 plugin to authenticate.
@@ -106,8 +105,7 @@ parameter to specify authentication mode. It's default value is INTERNAL.
 </Plugin>
 ```
 
-SSL/TLS Support
-===============
+## SSL/TLS Support
 
 If Aerospike is configured with SSL/TLS, then you will need to configure the 
 plugin with SSL/TLS as well.
@@ -154,7 +152,7 @@ SSL/TLS parameters are as follows:
 * **TLSCRLCheckAll** - Check against all certificates in the CRL chain.
 
 
-#### SSL/TLS Protocols
+### SSL/TLS Protocols
 Available protocols are:
 TLSv1, TLSv1.1, TLSv1.2
 
