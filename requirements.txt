@@ -1,5 +1,3 @@
 pyyaml
 collectd
-
-# Uncomment the following when using authentication
-#bcrypt
+aerospike==3.10.0

@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # ------------------------------------------------------------------------------
-# Copyright 2012-2016 Aerospike, Inc.
+# Copyright 2012-2020 Aerospike, Inc.
 #
 # Portions may be licensed to Aerospike, Inc. under one or more contributor
 # license agreements.
@@ -16,15 +16,16 @@
 # the License.
 # ------------------------------------------------------------------------------
 
+__author__ = "Aerospike"
+__copyright__ = "Copyright 2020 Aerospike"
+__version__ = "3.0.0"
+
+import aerospike
+from aerospike.exception import ServerError
 import collectd
 import os
 import re
-import socket
-import struct
-import time
 import yaml
-
-from ctypes import create_string_buffer
 
 
 PLUGIN_NAME = 'aerospike'
@@ -36,7 +37,13 @@ SCHEMA_INSTALLED = '/opt/collectd-plugins/aerospike_schema.yaml'
 
 DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 3000
-DEFAULT_TIMEOUT = 0.7
+DEFAULT_TIMEOUT = 5
+
+# For units returned by latencies
+UNIT_MAP = {
+    'msec': 'ms',
+    'usec': 'us'
+}
 
 # =============================================================================
 #
@@ -52,7 +59,7 @@ def value():
         return input.strip()
     return parse
 
-
+# Creates pair from key1=val1 -> (key1, val1)
 def pair(delim='=', key=value(), value=value()):
     def parse(input):
         if input is None:
@@ -77,7 +84,7 @@ def seq(delim=';', entry=value()):
         return (entry(e) for e in input.strip().strip(delim).split(delim))
     return parse
 
-
+# Parses: key1=val1;key2=val2 -> (key1, val1), (key2, val2)
 def pairs():
     return seq(entry=pair())
 
@@ -183,17 +190,36 @@ class Counter(dict):
 #
 # -----------------------------------------------------------------------------
 
-STRUCT_PROTO = struct.Struct('! Q')
-STRUCT_AUTH = struct.Struct('! xxBB12x')
-STRUCT_FIELD = struct.Struct('! IB')
 
-MSG_VERSION = 0
-MSG_TYPE = 2
-AUTHENTICATE = 0
-USER = 0
-CREDENTIAL = 3
-SALT = "$2a$10$7EqJtq98hPqEX7fNZaFWoO"
+class Enumeration(set):
+    def __getattr__(self, name):
+        if name in self:
+            return name
+        raise AttributeError
 
+    def __getitem__(self, name):
+        if name in self:
+            return name
+        raise AttributeError
+
+AuthMode = Enumeration([
+    # Use internal authentication only.  Hashed password is stored on the server.
+	# Do not send clear password. This is the default.
+
+	"INTERNAL",
+
+    # Use external authentication (like LDAP).  Specific external authentication is
+	# configured on server.  If TLS defined, send clear password on node login via TLS.
+	# Throw exception if TLS is not defined.
+
+	"EXTERNAL",
+
+    # Use external authentication (like LDAP).  Specific external authentication is
+	# configured on server.  Send clear password on node login whether or not TLS is defined.
+	# This mode should only be used for testing purposes because it is not secure authentication.
+
+	"EXTERNAL_INSECURE",
+])
 
 class ClientError(Exception):
     pass
@@ -201,156 +227,69 @@ class ClientError(Exception):
 
 class Client(object):
 
-    def __init__(self, addr, port, timeout=0.7):
+    def __init__(self, addr, port, tls_enable=False, tls_name=None, tls_keyfile=None, tls_keyfile_pw=None, tls_certfile=None,
+                 tls_cafile=None, tls_capath=None, tls_cipher=None, tls_protocols=None, tls_cert_blacklist=None,
+                 tls_crl_check=False, tls_crl_check_all=False, auth_mode=aerospike.AUTH_INTERNAL, timeout=DEFAULT_TIMEOUT):
         self.addr = addr
         self.port = port
+        self.tls_name = tls_name
         self.timeout = timeout
-        self.sock = None
+        self.host = (self.addr, self.port)
+        if self.tls_name:
+            self.host = (self.addr, self.port, self.tls_name)
 
-    def connect(self):
-        s = None
-        for res in socket.getaddrinfo(self.addr, self.port, socket.AF_UNSPEC, socket.SOCK_STREAM):
-            af, socktype, proto, canonname, sa = res
-            try:
-                s = socket.socket(af, socktype, proto)
-            except socket.error as msg:
-                s = None
-                continue
-            try:
-                s.connect(sa)
-            except socket.error as msg:
-                s.close()
-                s = None
-                continue
-            break
+        tls_config = {
+            'enable': tls_enable
+        }
 
-        if s is None:
-            raise ClientError(
-                "Could not connect to server at %s %s" % (self.addr, self.port))
+        if tls_enable:
+            tls_config = {
+                'enable': tls_enable,
+                'keyfile': tls_keyfile,
+                'keyfile_pw': tls_keyfile_pw,
+                'certfile': tls_certfile,
+                'cafile': tls_cafile,
+                'capath': tls_capath,
+                'cipher_suite': tls_cipher,
+                'protocols': tls_protocols,
+                'cert_blacklist': tls_cert_blacklist,
+                'crl_check': tls_crl_check,
+                'crl_check_all': tls_crl_check_all
+            }
 
-        self.sock = s
-        return self
+        config = {
+            'hosts': [
+                self.host
+            ],
+
+            'policies': {
+                'timeout': self.timeout*1000,
+                'auth_mode': auth_mode
+            },
+
+            'tls': tls_config
+        }
+
+        self.asClient = aerospike.client(config)
+
+
+    def connect(self, username=None, password=None):
+        try:
+            self.asClient.connect(username, password)
+        except Exception as e:
+            raise ClientError("Could not connect to server at %s %s: %s" % (self.addr, self.port, str(e)))
 
     def close(self):
-        if self.sock is not None:
-            self.sock.settimeout(None)
-            self.sock.close()
-            self.sock = None
-
-    def auth(self, username, password, timeout=None):
-
-        import bcrypt
-
-        credential = bcrypt.hashpw(password, SALT)
-
-        if timeout is None:
-            timeout = self.timeout
-
-        l = 8 + 16
-        l += 4 + 1 + len(username)
-        l += 4 + 1 + len(credential)
-
-        buf = create_string_buffer(l)
-        offset = 0
-
-        proto = (MSG_VERSION << 56) | (MSG_TYPE << 48) | (l - 8)
-        STRUCT_PROTO.pack_into(buf, offset, proto)
-        offset += STRUCT_PROTO.size
-
-        STRUCT_AUTH.pack_into(buf, offset, AUTHENTICATE, 2)
-        offset += STRUCT_AUTH.size
-
-        STRUCT_FIELD.pack_into(buf, offset, len(username) + 1, USER)
-        offset += STRUCT_FIELD.size
-        fmt = "! %ds" % len(username)
-        struct.pack_into(fmt, buf, offset, username)
-        offset += len(username)
-
-        STRUCT_FIELD.pack_into(buf, offset, len(credential) + 1, CREDENTIAL)
-        offset += STRUCT_FIELD.size
-        fmt = "! %ds" % len(credential)
-        struct.pack_into(fmt, buf, offset, credential)
-        offset += len(credential)
-
-        self.send(buf)
-
-        buf = self.recv(8, timeout)
-        rv = STRUCT_PROTO.unpack(buf)
-        proto = rv[0]
-        pvers = (proto >> 56) & 0xFF
-        ptype = (proto >> 48) & 0xFF
-        psize = (proto & 0xFFFFFFFFFFFF)
-
-        buf = self.recv(psize, timeout)
-        status = ord(buf[1])
-
-        if status != 0:
-            raise ClientError("Autentication Error %d for '%s' " %
-                              (status, username))
-
-    def send(self, data):
-        if self.sock:
-            try:
-                r = self.sock.sendall(data)
-            except IOError as e:
-                raise ClientError(e)
-            except socket.error as e:
-                raise ClientError(e)
-        else:
-            raise ClientError('socket not available')
-
-    def send_request(self, request, pvers=2, ptype=1):
-        if request:
-            request += '\n'
-        sz = len(request) + 8
-        buf = create_string_buffer(len(request) + 8)
-        offset = 0
-
-        proto = (pvers << 56) | (ptype << 48) | len(request)
-        STRUCT_PROTO.pack_into(buf, offset, proto)
-        offset = STRUCT_PROTO.size
-
-        fmt = "! %ds" % len(request)
-        struct.pack_into(fmt, buf, offset, request)
-        offset = offset + len(request)
-
-        self.send(buf)
-
-    def recv(self, sz, timeout):
-        out = ""
-        pos = 0
-        start_time = time.time()
-        while pos < sz:
-            buf = None
-            try:
-                buf = self.sock.recv(sz)
-            except IOError as e:
-                raise ClientError(e)
-            if pos == 0:
-                out = buf
-            else:
-                out += buf
-            pos += len(buf)
-            if timeout and time.time() - start_time > timeout:
-                raise ClientError(socket.timeout())
-        return out
-
-    def recv_response(self, timeout=None):
-        buf = self.recv(8, timeout)
-        rv = STRUCT_PROTO.unpack(buf)
-        proto = rv[0]
-        pvers = (proto >> 56) & 0xFF
-        ptype = (proto >> 48) & 0xFF
-        psize = (proto & 0xFFFFFFFFFFFF)
-
-        if psize > 0:
-            return self.recv(psize, timeout)
-        return ""
+        if self.asClient is not None:
+            self.asClient.close()
+            self.asClient = None
 
     def info(self, request):
-        self.send_request(request)
-        res = self.recv_response(timeout=self.timeout)
+        read_policies = {'total_timeout': self.timeout}
+
+        res = self.asClient.info_node(request, self.host, policy=read_policies)
         out = re.split("\s+", res, maxsplit=1)
+
         if len(out) == 2:
             return out[1]
         else:
@@ -372,7 +311,7 @@ class Schema(object):
 
         for category, types in schema.iteritems():
             for type, metrics in types.iteritems():
-                for i, metric in enumerate(metrics):
+                for _, metric in enumerate(metrics):
                     self.register(category, type, metric)
 
     def register(self, category, type, metric):
@@ -391,7 +330,7 @@ class Schema(object):
     def lookup(self, category, name, val):
         types = self.schema[category] if category in self.schema else {}
         for type, metrics in types.iteritems():
-            if any(m == name) for m in metrics):
+            if name in metrics:
                 yield type, self.value(name, category, val, type)
 
     def value(self, name, cat, val, type):
@@ -408,7 +347,8 @@ class Schema(object):
                 val = 0
             else:
                 val = 1
-
+        if name in {"cluster_key", "cluster_principal", "paxos_principal"}:
+            val = int(val,16)
         return val
 
 
@@ -492,10 +432,8 @@ def namespace(client, config, meta, emit, namespace):
 
 def datacenters(client, config, meta, emit):
 
-    if config.get("enable-xdr", "false") == "false":
-        return
-
-    req = "get-dc-config"
+    # Version 5.0+
+    req = "get-config:context=xdr"
     res = None
 
     try:
@@ -503,19 +441,48 @@ def datacenters(client, config, meta, emit):
         if res is None or len(res) == 0:
             return
     except ClientError as e:
-        # If this fails, then it likely means it is not Aerospike EE
-        # so we reduce this to a debug message
+        # If this fails, then it is either not EE edition or it is a pre 5.0 version.
         collectd.debug('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    except ServerError as e:
+        # If this fails, cluster may not have xdr enabled at all.
+        collectd.info('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+
     else:
-        datacenters = parse(res, seq())
-        for entry in datacenters:
-            dc = dict(parse(entry, seq(entry=pair(), delim=':')))
-            datacenter(client, config, meta, emit, dc)
+        dcs = dict(parse(res, seq(entry=pair())))
 
+        try:
+            # dcs was added at server 5.0
+            dcs = parse(dcs["dcs"], seq(delim=','))
+            for dc in dcs:
+                xdr(client, config, meta, emit, dc)
+        except:
+            # If this fails it is likely a server version pre 5.0
+            # Version pre 5.0
+            req = "get-dc-config"
+            res = None
 
+            try:
+                res = client.info(req)
+                if res is None or len(res) == 0:
+                    return
+            except ClientError as e:
+                # If this fails, then it likely means it is not Aerospike EE
+                # so we reduce this to a debug message
+                collectd.debug('Failed to execute info "%s" - %s' % (req, e))
+            else:
+                datacenters = parse(res, seq())
+                for entry in datacenters:
+                    dc = dict(parse(entry, seq(delim=':', entry=pair())))
+                    datacenter(client, config, meta, emit, dc)
+
+# For the old DC metrics prior to version 5.0
 def datacenter(client, config, meta, emit, dc):
 
-    req = "dc/%s" % (dc['DC_Name'])
+    dc_name = dc['DC_Name'] if 'DC_Name' in dc else dc['dc-name']
+
+    req = "dc/%s" % dc_name
     res = None
 
     try:
@@ -526,10 +493,47 @@ def datacenter(client, config, meta, emit, dc):
     else:
         entries = parse(res, parser=pairs())
         for name, value in entries:
-            emit(meta, name, value, ['datacenter', dc['DC_Name']])
+            emit(meta, name, value, ['datacenter', dc_name])
+
+# For the new XDR metrics as of server version 5.0
+def xdr(client, config, meta, emit, dc_name):
+    req = "get-stats:context=xdr;dc=%s" % dc_name
+    res = None
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        entries = parse(res, seq(entry=pair()))
+        for name, value in entries:
+            emit(meta, name, value, ['xdr', dc_name])
 
 
 def latency(client, config, meta, emit):
+    req = 'build'
+    version = None
+
+    try:
+        version = client.info(req).split('.')
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+
+        if int(version[0]) > 5 or (int(version[0]) == 5 and int(version[1]) >= 1):
+            use_latencies(client, config, meta, emit)
+        else:
+            use_latency(client, config, meta, emit)
+
+'''
+Example latency response (pre 5.1):
+error-no-data-yet-or-back-too-small;{test}-read:20:52:11-GMT,ops/sec, \
+>1ms,>8ms,>64ms;20:52:21,46973.8,0.00,0.00,0.00;{test}-write:20:52:11-GMT, \
+ops/sec,>1ms,>8ms,>64ms;20:52:21,46968.7,0.00,0.00,0.00; \
+error-no-data-yet-or-back-too-small;error-no-data-yet-or-back-too-small; \
+'''
+def use_latency(client, config, meta, emit):
     req = "latency:"
     res = None
 
@@ -539,7 +543,10 @@ def latency(client, config, meta, emit):
         collectd.warning('Failed to execute info "%s" - %s' % (req, e))
         meta['timeouts'] += 1
     else:
-        tdata = res.split(';')[:-1]
+        res = res.strip()
+        if res.endswith(';'):
+            res = res[:-1] # 3.9+ releases stripped out a trailing ';'
+        tdata = res.split(';')
         while tdata != []:
             columns = tdata.pop(0)
             # keep popping if there's a line with error
@@ -553,13 +560,12 @@ def latency(client, config, meta, emit):
             hist_name, columns = columns.split(':', 1)
 
             # parse dynamic metrics
-            shortname = re.sub('{.*}-','',hist_name)
-            match = re.match('{(.*)}',hist_name)
+            shortname = re.sub('{.*}-', '', hist_name)
+            match = re.match('{(.*)}', hist_name)
             context = ["latency"]
             if match:
                 namespace = match.groups()[0]
                 context.append(namespace)
-	
             columns = columns.split(',')
             row = row.split(',')
 
@@ -580,6 +586,127 @@ def latency(client, config, meta, emit):
                 value = row.pop(0)
                 emit(meta, name, value, context)
 
+'''
+Example latencies response (5.1+) with variable metric units:
+batch-index:;{test}-read:usec,39550.9,100.00,100.00,100.00,81.61,59.74, \
+54.47,41.02,17.33,3.80,0.97,0.33,0.10,0.03,0.01,0.00,0.00,0.00;{test}-write: \
+usec,39539.9,100.00,100.00,100.00,94.33,63.22,56.92,46.06,22.15,5.02,1.21, \
+0.40,0.13,0.04,0.01,0.00,0.00,0.00;{test}-udf:;{test}-query:;{bar}-read:; \
+{bar}-write:;{bar}-udf:;{bar}-query:
+'''
+def use_latencies(client, config, meta, emit):
+    req = "latencies:"
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        res = res.strip()
+        data = res.split(';')
+
+        for histogram in data:
+            hist_name, hist_data = histogram.split(':')
+            
+            if hist_data is None or len(hist_data) == 0:
+                continue
+
+            hist_data = hist_data.split(',')
+            shortname = re.sub('{.*}-', '', hist_name)
+            match = re.match('{(.*)}', hist_name)
+            context = ["latency"]
+
+            if match:
+                namespace = match.groups()[0]
+                context.append(namespace)
+
+            unit = UNIT_MAP[hist_data.pop(0)]
+            name = "%s_tps" % (shortname)
+            value = hist_data.pop(0)
+            emit(meta, name, value, context)
+
+            for idx, value in enumerate(hist_data):
+                name = "%s_pct_gt_%s%s" % (shortname, 2**idx, unit)
+                emit(meta, name, value, context)
+
+def bins(client, config, meta, emit):
+    req = "bins"
+    res = None
+
+    try:
+        res = client.info(req)
+        if res is None or len(res) == 0:
+            return
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        bins = parse(res, seq())
+        for bin in bins:
+            namespace, metrics = bin.split(':')
+            entries = parse(metrics, seq(delim=',', entry=pair()))
+            for name, value in entries:
+                emit(meta, name, value, ['bins', namespace])
+
+def sets(client, config, meta, emit):
+    req = "sets"
+    res = None
+
+    try:
+        res = client.info(req)
+        if res is None or len(res) == 0:
+            return
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        sets = parse(res, seq())
+        for _set in sets:
+            entries = parse(_set, seq(delim=':', entry=pair()))
+            entries_dict = dict(
+                parse(_set, seq(delim=':', entry=pair())))
+            namespace = entries_dict['ns']
+            set_name = entries_dict['set']
+            for name, value in entries:
+                emit(meta, name, value, ['sets', namespace, set_name])
+
+def sindexes(client, config, meta, emit):
+    req = 'sindex'
+    res = None
+
+    try:
+        res = client.info(req)
+        if res is None or len(res) == 0:
+            return
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        sindexes = parse(res, seq())
+        for sidx in sindexes:
+            sidx = dict(parse(sidx, seq(delim=':', entry=pair())))
+            sindex(client, config, meta, emit, sidx)
+
+
+def sindex(client, config, meta, emit, sidx):
+    namespace = sidx['ns']
+    index_name = sidx['indexname']
+
+    req = "sindex/%s/%s" % (namespace, index_name)
+    res = None
+
+    try:
+        res = client.info(req)
+    except ClientError as e:
+        collectd.warning('Failed to execute info "%s" - %s' % (req, e))
+        meta['timeouts'] += 1
+    else:
+        entries = parse(res, parser=pairs())
+        for name, value in entries:
+            emit(meta, name, value, ['sindex', namespace, index_name])
+
 
 # =============================================================================
 #
@@ -591,6 +718,7 @@ class Plugin(object):
 
     def __init__(self, readers=[]):
 
+        self.client = None
         self.plugin_name = PLUGIN_NAME
         self.readers = readers
 
@@ -599,8 +727,23 @@ class Plugin(object):
         self.port = DEFAULT_PORT
         self.timeout = DEFAULT_TIMEOUT
         self.schema_path = None
+
         self.username = None
         self.password = None
+        self.auth_mode = aerospike.AUTH_INTERNAL
+
+        self.tls_enable = False
+        self.tls_name = None
+        self.tls_keyfile = None
+        self.tls_keyfile_pw = None
+        self.tls_certfile = None
+        self.tls_cafile = None
+        self.tls_capath = None
+        self.tls_cipher = None
+        self.tls_protocols = None
+        self.tls_cert_blacklist = None
+        self.tls_crl_check = False
+        self.tls_crl_check_all = False
 
         # prefixing is not yet supported
         # I personally think it is best to not do it in the plugin
@@ -614,22 +757,59 @@ class Plugin(object):
 
     def config(self, obj):
         for node in obj.children:
+            collectd.warning("Param: %s, Value %s"%(node.key, node.values[0]))
             if node.key == 'Host':
                 self.host = node.values[0]
             elif node.key == 'Port':
                 self.port = int(node.values[0])
             elif node.key == 'Timeout':
                 self.timeout = float(node.values[0])
+
             elif node.key == 'User':
                 self.username = node.values[0]
             elif node.key == 'Password':
                 self.password = node.values[0]
+            elif node.key == 'AuthMode':
+                if node.values[0] == AuthMode.EXTERNAL:
+                    self.auth_mode = aerospike.AUTH_EXTERNAL
+                elif node.values[0] == AuthMode.EXTERNAL_INSECURE:
+                    self.auth_mode = aerospike.AUTH_EXTERNAL_INSECURE
+
             # elif node.key == 'Prefix':
             #     self.prefix = node.values[0]
             # elif node.key == 'HostNameOverride':
             #     self.host_name = node.values[0]
+
             elif node.key == 'Schema':
                 self.schema_path = node.values[0]
+
+            elif node.key == 'TLSEnable':
+                self.tls_enable = node.values[0]
+            elif node.key == 'TLSName':
+                self.tls_name = node.values[0]
+            elif node.key == 'TLSKeyfile':
+                self.tls_keyfile = node.values[0]
+            elif node.key == 'TLSKeyfilePw':
+                self.tls_keyfile_pw = node.values[0]
+            elif node.key == 'TLSCertfile':
+                self.tls_certfile = node.values[0]
+            elif node.key == 'TLSCAFile':
+                self.tls_cafile = node.values[0]
+            elif node.key == 'TLSCAPath':
+                self.tls_capath = node.values[0]
+            elif node.key == 'TLSCipher':
+                self.tls_cipher = node.values[0]
+            elif node.key == 'EncryptOnly':
+                self.encrypt_only = node.values[0]
+            elif node.key == 'TLSProtocols':
+                self.tls_protocols = node.values[0]
+            elif node.key == 'TLSBlacklist':
+                self.tls_blacklist = node.values[0]
+            elif node.key == 'TLSCRLCheck':
+                self.tls_crl_check = node.values[0]
+            elif node.key == 'TLSCRLCheckAll':
+                self.tls_crl_check_all = node.values[0]
+
             else:
                 collectd.warning('%s: Unknown configuration key %s' % (
                     self.plugin_name, node.key))
@@ -651,80 +831,113 @@ class Plugin(object):
         if self.schema_path:
             collectd.info('Aerospike Plugin: schema %s' % self.schema_path)
             with open(self.schema_path) as schema_file:
-                self.schema = Schema(yaml.load(schema_file))
+                self.schema = Schema(
+                    yaml.load(schema_file, Loader=yaml.SafeLoader))
 
         self.initialized = True
+
+    def init_client(self):
+
+        collectd.info("Aerospike Plugin: client %s:%s" % (self.host, self.port))
+        self.client = Client(addr=self.host, port=self.port, tls_enable=self.tls_enable, tls_name=self.tls_name,
+                        tls_keyfile=self.tls_keyfile, tls_keyfile_pw=self.tls_keyfile_pw, tls_certfile=self.tls_certfile,
+                        tls_cafile=self.tls_cafile, tls_capath=self.tls_capath, tls_cipher=self.tls_cipher,
+                        tls_protocols=self.tls_protocols, tls_cert_blacklist=self.tls_cert_blacklist,
+                        tls_crl_check=self.tls_crl_check, tls_crl_check_all=self.tls_crl_check_all,
+                        auth_mode=self.auth_mode, timeout=self.timeout)
+
+        try:
+            self.client.connect(username=self.username, password=self.password)
+
+        except ClientError as e:
+            if self.client:
+                self.client.close()
+                self.client = None
+            raise e
+
+    def init(self):
+        meta = Counter()
+        self.setup()
+
+        try:
+            self.init_client()
+        except ClientError as e:
+            collectd.warning('Failed to connect to %s:%s - %s' %
+                             (self.host, self.port, e))
+            meta['failures'] += 1
+
+    def shutdown(self):
+        if self.client:
+            self.client.close()
+            self.client = None
 
     def emit(self, meta, name, value, context):
         meta['emits'] += 1
         category = context[0]
-
-        for type, value in self.schema.lookup(category, name, value):
-
-            val = collectd.Values()
-            val.plugin = self.plugin_name
-            val.plugin_instance = ".".join(context)
-            val.type = type
-            val.type_instance = name
-            # HACK with this dummy dict in place JSON parsing works
-            # https://github.com/collectd/collectd/issues/716
-            val.meta = {'0': True}
-            val.values = [value, ]
-            val.dispatch()
-
-            meta['writes'] += 1
+        names = name.rsplit('.', 1)    # new 4.3 metric schema: storage-engine.$device[X].$metric
+        metric = names.pop()
+        prefix = ""
+        plugin_instance = ".".join(context)
+        if names:
+            prefix = names.pop()
+            # intermediary schema is held in 'name' variable
+            # move intermediary up, since schema is hostname.pluging-plugin_instance.type-type_instance
+            plugin_instance += "." + prefix.replace('[', '').replace(']', '')
+        for type, value in self.schema.lookup(category, metric, value):
+            try:
+                val = collectd.Values()
+                val.plugin = self.plugin_name
+                val.plugin_instance = plugin_instance
+                val.type = type
+                val.type_instance = metric
+                # HACK with this dummy dict in place JSON parsing works
+                # https://github.com/collectd/collectd/issues/716
+                val.meta = {'0': True}
+                val.values = [value, ]
+                val.dispatch()
+                meta['writes'] += 1
+            except Exception as e:
+                collectd.warning("Error sending data:")
+                collectd.warning("Category %s, Name %s, Value %s, Type %s"%(category, name, value, type))
+                collectd.warning(str(e))
 
     def read(self):
-        addr = self.host
-        port = self.port
-        username = self.username
-        password = self.password
         meta = Counter()
         alive = 0
 
-        self.setup()
-
-        collectd.info("Aerospike Plugin: client %s:%s" % (addr, port))
-        client = Client(addr=addr, port=port)
-
         try:
-            client.connect()
-            if username and password:
-                collectd.info('Aerospike Plugin: auth %s' % username)
-                status = client.auth(username, password)
+            if not self.client:
+                self.init_client()
 
         except ClientError as e:
             collectd.warning('Failed to connect to %s:%s - %s' %
-                             (addr, port, e))
+                             (self.host, self.port, e))
             meta['failures'] += 1
+
         else:
+            if self.client:
+                req = "node"
+                res = None
+                try:
+                    res = self.client.info(req)
+                except ClientError as e:
+                    collectd.warning('Failed to execute info: "%s" - %s' % (req, e))
+                else:
+                    self.node_id = res
 
-            req = "node"
-            res = None
-            try:
-                res = client.info(req)
-            except ClientError as e:
-                collectd.warning(
-                    'Failed to execute info: "%s" - %s' % (req, e))
-            else:
-                self.node_id = res
+                req = "get-config"
+                res = None
+                try:
+                    res = self.client.info(req)
+                except ClientError as e:
+                    collectd.warning('Failed to execute info: "%s" - %s' % (req, e))
+                else:
 
-            req = "get-config"
-            res = None
-            try:
-                res = client.info(req)
-            except ClientError as e:
-                collectd.warning(
-                    'Failed to execute info: "%s" - %s' % (req, e))
-            else:
+                    config = dict(parse(res, pairs()))
 
-                config = dict(parse(res, pairs()))
-
-                for reader in self.readers:
-                    reader(client, config, meta, self.emit)
-            alive = 1
-        finally:
-            client.close()
+                    for reader in self.readers:
+                        reader(self.client, config, meta, self.emit)
+                alive = 1
 
         # record meta here.
         collectd.info('Aerospike Plugin: %s' % str(meta))
@@ -743,6 +956,13 @@ plugin = Plugin(readers=[
     namespaces,
     datacenters,
     latency,
+    bins,
+    sets,
+    sindexes
 ])
-collectd.register_read(plugin.read)
+
+collectd.register_init(plugin.init)
 collectd.register_config(plugin.config)
+collectd.register_read(plugin.read)
+collectd.register_shutdown(plugin.shutdown)
+
