@@ -1,5 +1,6 @@
+--- # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
-# Copyright 2012-2019 Aerospike, Inc.
+# Copyright 2012-2020 Aerospike, Inc.
 #
 # Portions may be licensed to Aerospike, Inc. under one or more contributor
 # license agreements.
@@ -18,7 +19,7 @@
 # ==============================================================================
 # Schema for Aerospike Plugin for collectd
 # ------------------------------------------------------------------------------
-# This document specifies the metrics that will be sent to collectd. The 
+# This document specifies the metrics that will be sent to collectd. The
 # document is formatted using YAML, so you can use YAML commenting to disable
 # a metric.
 #
@@ -33,10 +34,10 @@
 #     - cluster
 #     - latency
 #     - service
-#     - namespace 
+#     - namespace
 #     - datacenter
 #
-# The [type] is a type defined in either types.db or aerospike_types.db. A 
+# The [type] is a type defined in either types.db or aerospike_types.db. A
 # metric may be associated with multiple types. So, if you find that you need
 # to collect both a derivative and gauge, then you can easily do so.
 #
@@ -49,22 +50,21 @@
 # Some metrics may define a conversion, which is formatted as:
 #
 #     - metric:[input]=[output][...]
-# 
+#
 # For example, we want to record "dc_state" as a boolean, but it's actual value
 # is a string, so we can map the string to boolean:
 #
 #     - dc_state:CLUSTER_UP=true,*=false
 #
-# This states that if the value is "CLUSTER_UP", then map it to "1", 
+# This states that if the value is "CLUSTER_UP", then map it to "1",
 # otherwise map it to "0".
 #
 # ------------------------------------------------------------------------------
 
 # ==============================================================================
-# Meta metrics used to provide information about plugin itself
+# Meta metrics used to provide information about plugin itself.
 # ------------------------------------------------------------------------------
 meta:
-
   gauge:
     - alive
     - timeouts
@@ -76,7 +76,6 @@ meta:
 # Cluster metrics used to provide information about the cluster itself.
 # ------------------------------------------------------------------------------
 cluster:
-  
   gauge:
     - services
     - services-alumni
@@ -85,7 +84,6 @@ cluster:
 # Latency metrics used to measure transaction throughput and latency.
 # ------------------------------------------------------------------------------
 latency:
-  
   gauge:
     - read_tps
     - reads_tps
@@ -97,14 +95,73 @@ latency:
 
   percent:
     - read_pct_gt_1ms
+    - read_pct_gt_2ms
+    - read_pct_gt_4ms
     - read_pct_gt_8ms
+    - read_pct_gt_16ms
+    - read_pct_gt_32ms
     - read_pct_gt_64ms
-    - reads_pct_gt_1ms
-    - reads_pct_gt_8ms
-    - reads_pct_gt_64ms
+    - read_pct_gt_128ms
+    - read_pct_gt_256ms
+    - read_pct_gt_512ms
+    - read_pct_gt_1024ms
+    - read_pct_gt_2048ms
+    - read_pct_gt_4096ms
+    - read_pct_gt_8192ms
+    - read_pct_gt_16384ms
+    - read_pct_gt_32768ms
+    - read_pct_gt_65536ms
+    - read_pct_gt_1us
+    - read_pct_gt_2us
+    - read_pct_gt_4us
+    - read_pct_gt_8us
+    - read_pct_gt_16us
+    - read_pct_gt_32us
+    - read_pct_gt_64us
+    - read_pct_gt_128us
+    - read_pct_gt_256us
+    - read_pct_gt_512us
+    - read_pct_gt_1024us
+    - read_pct_gt_2048us
+    - read_pct_gt_4096us
+    - read_pct_gt_8192us
+    - read_pct_gt_16384us
+    - read_pct_gt_32768us
+    - read_pct_gt_65536us
     - write_pct_gt_1ms
+    - write_pct_gt_2ms
+    - write_pct_gt_4ms
     - write_pct_gt_8ms
+    - write_pct_gt_16ms
+    - write_pct_gt_32ms
     - write_pct_gt_64ms
+    - write_pct_gt_128ms
+    - write_pct_gt_256ms
+    - write_pct_gt_512ms
+    - write_pct_gt_1024ms
+    - write_pct_gt_2048ms
+    - write_pct_gt_4096ms
+    - write_pct_gt_8192ms
+    - write_pct_gt_16384ms
+    - write_pct_gt_32768ms
+    - write_pct_gt_65536ms
+    - write_pct_gt_1us
+    - write_pct_gt_2us
+    - write_pct_gt_4us
+    - write_pct_gt_8us
+    - write_pct_gt_16us
+    - write_pct_gt_32us
+    - write_pct_gt_64us
+    - write_pct_gt_128us
+    - write_pct_gt_256us
+    - write_pct_gt_512us
+    - write_pct_gt_1024us
+    - write_pct_gt_2048us
+    - write_pct_gt_4096us
+    - write_pct_gt_8192us
+    - write_pct_gt_16384us
+    - write_pct_gt_32768us
+    - write_pct_gt_65536us
     - writes_master_pct_gt_1ms
     - writes_master_pct_gt_8ms
     - writes_master_pct_gt_64ms
@@ -112,11 +169,175 @@ latency:
     - proxy_pct_gt_8ms
     - proxy_pct_gt_64ms
     - udf_pct_gt_1ms
+    - udf_pct_gt_2ms
+    - udf_pct_gt_4ms
     - udf_pct_gt_8ms
+    - udf_pct_gt_16ms
+    - udf_pct_gt_32ms
     - udf_pct_gt_64ms
+    - udf_pct_gt_128ms
+    - udf_pct_gt_256ms
+    - udf_pct_gt_512ms
+    - udf_pct_gt_1024ms
+    - udf_pct_gt_2048ms
+    - udf_pct_gt_4096ms
+    - udf_pct_gt_8192ms
+    - udf_pct_gt_16384ms
+    - udf_pct_gt_32768ms
+    - udf_pct_gt_65536ms
+    - udf_pct_gt_1us
+    - udf_pct_gt_2us
+    - udf_pct_gt_4us
+    - udf_pct_gt_8us
+    - udf_pct_gt_16us
+    - udf_pct_gt_32us
+    - udf_pct_gt_64us
+    - udf_pct_gt_128us
+    - udf_pct_gt_256us
+    - udf_pct_gt_512us
+    - udf_pct_gt_1024us
+    - udf_pct_gt_2048us
+    - udf_pct_gt_4096us
+    - udf_pct_gt_8192us
+    - udf_pct_gt_16384us
+    - udf_pct_gt_32768us
+    - udf_pct_gt_65536us
     - query_pct_gt_1ms
+    - query_pct_gt_2ms
+    - query_pct_gt_4ms
     - query_pct_gt_8ms
+    - query_pct_gt_16ms
+    - query_pct_gt_32ms
     - query_pct_gt_64ms
+    - query_pct_gt_128ms
+    - query_pct_gt_256ms
+    - query_pct_gt_512ms
+    - query_pct_gt_1024ms
+    - query_pct_gt_2048ms
+    - query_pct_gt_4096ms
+    - query_pct_gt_8192ms
+    - query_pct_gt_16384ms
+    - query_pct_gt_32768ms
+    - query_pct_gt_65536ms
+    - query_pct_gt_1us
+    - query_pct_gt_2us
+    - query_pct_gt_4us
+    - query_pct_gt_8us
+    - query_pct_gt_16us
+    - query_pct_gt_32us
+    - query_pct_gt_64us
+    - query_pct_gt_128us
+    - query_pct_gt_256us
+    - query_pct_gt_512us
+    - query_pct_gt_1024us
+    - query_pct_gt_2048us
+    - query_pct_gt_4096us
+    - query_pct_gt_8192us
+    - query_pct_gt_16384us
+    - query_pct_gt_32768us
+    - query_pct_gt_65536us
+    - query-rec-count_pct_gt_1ms
+    - query-rec-count_pct_gt_2ms
+    - query-rec-count_pct_gt_4ms
+    - query-rec-count_pct_gt_8ms
+    - query-rec-count_pct_gt_16ms
+    - query-rec-count_pct_gt_32ms
+    - query-rec-count_pct_gt_64ms
+    - query-rec-count_pct_gt_128ms
+    - query-rec-count_pct_gt_256ms
+    - query-rec-count_pct_gt_512ms
+    - query-rec-count_pct_gt_1024ms
+    - query-rec-count_pct_gt_2048ms
+    - query-rec-count_pct_gt_4096ms
+    - query-rec-count_pct_gt_8192ms
+    - query-rec-count_pct_gt_16384ms
+    - query-rec-count_pct_gt_32768ms
+    - query-rec-count_pct_gt_65536ms
+    - query-rec-count_pct_gt_1us
+    - query-rec-count_pct_gt_2us
+    - query-rec-count_pct_gt_4us
+    - query-rec-count_pct_gt_8us
+    - query-rec-count_pct_gt_16us
+    - query-rec-count_pct_gt_32us
+    - query-rec-count_pct_gt_64us
+    - query-rec-count_pct_gt_128us
+    - query-rec-count_pct_gt_256us
+    - query-rec-count_pct_gt_512us
+    - query-rec-count_pct_gt_1024us
+    - query-rec-count_pct_gt_2048us
+    - query-rec-count_pct_gt_4096us
+    - query-rec-count_pct_gt_8192us
+    - query-rec-count_pct_gt_16384us
+    - query-rec-count_pct_gt_32768us
+    - query-rec-count_pct_gt_65536us
+    - batch-index_pct_gt_1ms
+    - batch-index_pct_gt_2ms
+    - batch-index_pct_gt_4ms
+    - batch-index_pct_gt_8ms
+    - batch-index_pct_gt_16ms
+    - batch-index_pct_gt_32ms
+    - batch-index_pct_gt_64ms
+    - batch-index_pct_gt_128ms
+    - batch-index_pct_gt_256ms
+    - batch-index_pct_gt_512ms
+    - batch-index_pct_gt_1024ms
+    - batch-index_pct_gt_2048ms
+    - batch-index_pct_gt_4096ms
+    - batch-index_pct_gt_8192ms
+    - batch-index_pct_gt_16384ms
+    - batch-index_pct_gt_32768ms
+    - batch-index_pct_gt_65536ms
+    - batch-index_pct_gt_1us
+    - batch-index_pct_gt_2us
+    - batch-index_pct_gt_4us
+    - batch-index_pct_gt_8us
+    - batch-index_pct_gt_16us
+    - batch-index_pct_gt_32us
+    - batch-index_pct_gt_64us
+    - batch-index_pct_gt_128us
+    - batch-index_pct_gt_256us
+    - batch-index_pct_gt_512us
+    - batch-index_pct_gt_1024us
+    - batch-index_pct_gt_2048us
+    - batch-index_pct_gt_4096us
+    - batch-index_pct_gt_8192us
+    - batch-index_pct_gt_16384us
+    - batch-index_pct_gt_32768us
+    - batch-index_pct_gt_65536us
+    - re-repl_pct_gt_1ms
+    - re-repl_pct_gt_2ms
+    - re-repl_pct_gt_4ms
+    - re-repl_pct_gt_8ms
+    - re-repl_pct_gt_16ms
+    - re-repl_pct_gt_32ms
+    - re-repl_pct_gt_64ms
+    - re-repl_pct_gt_128ms
+    - re-repl_pct_gt_256ms
+    - re-repl_pct_gt_512ms
+    - re-repl_pct_gt_1024ms
+    - re-repl_pct_gt_2048ms
+    - re-repl_pct_gt_4096ms
+    - re-repl_pct_gt_8192ms
+    - re-repl_pct_gt_16384ms
+    - re-repl_pct_gt_32768ms
+    - re-repl_pct_gt_65536ms
+    - re-repl_pct_gt_1us
+    - re-repl_pct_gt_2us
+    - re-repl_pct_gt_4us
+    - re-repl_pct_gt_8us
+    - re-repl_pct_gt_16us
+    - re-repl_pct_gt_32us
+    - re-repl_pct_gt_64us
+    - re-repl_pct_gt_128us
+    - re-repl_pct_gt_256us
+    - re-repl_pct_gt_512us
+    - re-repl_pct_gt_1024us
+    - re-repl_pct_gt_2048us
+    - re-repl_pct_gt_4096us
+    - re-repl_pct_gt_8192us
+    - re-repl_pct_gt_16384us
+    - re-repl_pct_gt_32768us
+    - re-repl_pct_gt_65536us
 
 # ==============================================================================
 # Service metrics provide details about the state of the service
@@ -124,12 +345,11 @@ latency:
 
 # Inline comments indicate moved/renamed metrics with ASD 3.9+
 service:
-
   gauge:
-    - aggr_scans_failed     # Moved to NS scan_aggr_error
-    - aggr_scans_succeded    # Moved to NS scan_aggr_complete
+    - aggr_scans_failed # Moved to NS scan_aggr_error
+    - aggr_scans_succeded # Moved to NS scan_aggr_complete
     - batch_index_proto_compression_ratio
-    - cluster_clock_skew     # Renames to cluster_clock_skew_ms 4.0.0.4
+    - cluster_clock_skew # Renames to cluster_clock_skew_ms 4.0.0.4
     - cluster_clock_skew_ms
     - cluster_clock_skew_stop_writes_sec
     - cluster_key
@@ -152,19 +372,19 @@ service:
     - fabric_meta_recv_rate
     - fabric_rw_send_rate
     - fabric_rw_recv_rate
-    - failed_node_sessions_pending    # renamed xdr_actived_failed_node_sessions
+    - failed_node_sessions_pending # renamed xdr_actived_failed_node_sessions
     - heap_site_count
     - heartbeat_connections
     - info_queue
     - latency_avg_dlogread
     - latency_avg_dlogwrite
-    - latency_avg_ship        # renamed xdr_ship_latency_avg
-    - linkdown_sessions_pending        # renamed xdr_active_link_down_sessions
+    - latency_avg_ship # renamed xdr_ship_latency_avg
+    - linkdown_sessions_pending # renamed xdr_active_link_down_sessions
     - migrate_partitions_remaining
-    - migrate_progress_recv        # moved to NS migrate_rx_partitions_active
-    - migrate_progress_send        # moved to NS migrate_tx_partitions_active
-    - migrate_rx_objs        # moved to NS migrate_rx_instance_count
-    - migrate_tx_objs        # moved to NS migrate_tx_instance_count
+    - migrate_progress_recv # moved to NS migrate_rx_partitions_active
+    - migrate_progress_send # moved to NS migrate_tx_partitions_active
+    - migrate_rx_objs # moved to NS migrate_rx_instance_count
+    - migrate_tx_objs # moved to NS migrate_tx_instance_count
     - objects
     - reclaimed_recs_dlog
     - rw_in_progress
@@ -178,21 +398,21 @@ service:
     - paxos_principal
     - pmem_compression_ratio
     - proxy_in_progress
-    - queue                # renamed tsvc_queue
+    - queue # renamed tsvc_queue
     - record_locks
     - record_refs
-    - remaining_migrations        # renamed to migrate_partitions_remaining
+    - remaining_migrations # renamed to migrate_partitions_remaining
     - stat_evicted_objects_time
-    - sub-records     # renamed to sub_objects
+    - sub-records # renamed to sub_objects
     - sub_objects
     - time_since_rebalance
     - tombstones
     - total_recs_dlog
-    - transaction_queue_used    # renamed xdr_read_txnq_used
+    - transaction_queue_used # renamed xdr_read_txnq_used
     - tree_gc_queue
     - tsvc_queue
     - tree_count
-    - used_recs_dlog    # renamed dlog_used_objects
+    - used_recs_dlog # renamed dlog_used_objects
     - waiting_transactions
     - query_long_queue_size
     - query_short_queue_size
@@ -217,16 +437,16 @@ service:
     - dlog_free_pct
     - free-pct-disk
     - free-pct-memory
-    - free_dlog_pct        # renamed dlog_free_pct
+    - free_dlog_pct # renamed dlog_free_pct
     - heap_efficiency_pct
     - process_cpu_pct
-    - read_threads_avg_processing_time_pct        # renamed xdr_read_active_avg_pct
-    - read_threads_avg_waiting_time_pct            # renamed xdr_read_idle_avg_pct
+    - read_threads_avg_processing_time_pct # renamed xdr_read_active_avg_pct
+    - read_threads_avg_waiting_time_pct # renamed xdr_read_idle_avg_pct
     - system_free_mem_pct
     - system_total_cpu_pct
     - system_user_cpu_pct
     - system_kernel_cpu_pct
-    - transaction_queue_used_pct        # renamed xdr_read_txnq_used_pct
+    - transaction_queue_used_pct # renamed xdr_read_txnq_used_pct
     - xdr_read_active_avg_pct
     - xdr_read_idle_avg_pct
     - xdr_read_reqq_used_pct
@@ -239,15 +459,15 @@ service:
     - heap_active_kbytes
     - heap_mapped_kbytes
     - index-used-bytes-memory
-    - sindex-used-bytes-memory        # moved to NS memory_used_sindex_bytes
+    - sindex-used-bytes-memory # moved to NS memory_used_sindex_bytes
     - total-bytes-disk
     - total-bytes-memory
     - used-bytes-disk
     - used-bytes-memory
 
   operations:
-    - basic_scans_failed    # moved to NS scan_basic_error
-    - basic_scans_succeeded    # moved to NS scan_basic_complete
+    - basic_scans_failed # moved to NS scan_basic_error
+    - basic_scans_succeeded # moved to NS scan_basic_complete
     - batch_error
     - batch_index_delay
     - batch_index_initiate
@@ -275,23 +495,23 @@ service:
     - early_tsvc_ops_sub_error
     - early_tsvc_udf_sub_error
     - err_duplicate_proxy_request
-    - err_out_of_space    
-    - err_recs_dropped            # renamed xdr_queue_overflow_error
+    - err_out_of_space
+    - err_recs_dropped # renamed xdr_queue_overflow_error
     - err_replica_non_null_node
     - err_replica_null_node
     - err_rw_cant_put_unique
-    - err_rw_pending_limit     # moved to NS fail_key_busy
+    - err_rw_pending_limit # moved to NS fail_key_busy
     - err_rw_request_not_found
     - err_storage_queue_full
     - err_sync_copy_null_master
     - err_sync_copy_null_node
     - err_tsvc_requests
-    - err_tsvc_requests_timeout       # moved to NS tsvc_client_timeout
+    - err_tsvc_requests_timeout # moved to NS tsvc_client_timeout
     - err_write_fail_bin_exists
     - err_write_fail_bin_name
     - err_write_fail_bin_not_found
-    - err_write_fail_forbidden      # moved to NS fail_xdr_forbidden
-    - err_write_fail_generation     # moved to NS fail_generation
+    - err_write_fail_forbidden # moved to NS fail_xdr_forbidden
+    - err_write_fail_generation # moved to NS fail_generation
     - err_write_fail_generation_xdr
     - err_write_fail_incompatible_type
     - err_write_fail_key_exists
@@ -302,27 +522,27 @@ service:
     - err_write_fail_prole_delete
     - err_write_fail_prole_generation
     - err_write_fail_prole_unknown
-    - err_write_fail_record_too_big    # moved to NS fail_record_too_big
+    - err_write_fail_record_too_big # moved to NS fail_record_too_big
     - err_write_fail_unknown
     - fabric_msgs_rcvd
     - fabric_msgs_sent
     - heartbeat_received_foreign
     - heartbeat_received_self
-    - hotkeys_fetched        # renamed xdr_hotkey_fetch
+    - hotkeys_fetched # renamed xdr_hotkey_fetch
     - info_complete
-    - local_recs_error        # renamed xdr_read_error
-    - local_recs_fetch_avg_latency        # renamed xdr_read_latency_avg
-    - local_recs_fetched        # renamed xdr_read_success
-    - local_recs_notfound        # renamed xdr_read_notfound
+    - local_recs_error # renamed xdr_read_error
+    - local_recs_fetch_avg_latency # renamed xdr_read_latency_avg
+    - local_recs_fetched # renamed xdr_read_success
+    - local_recs_notfound # renamed xdr_read_notfound
     - migrate_msgs_recv
     - migrate_msgs_sent
     - migrate_num_incoming_accepted
     - migrate_num_incoming_refused
     - noship_recs_expired
-    - noship_recs_hotkey    # renamed xdr_hotkey_skip
+    - noship_recs_hotkey # renamed xdr_hotkey_skip
     - noship_recs_notmaster
-    - noship_recs_uninitialized_destination        # renamed xdr_uninitialized_destination_error
-    - noship_recs_unknown_namespace            # renamed xdr_unknown_namespace_error
+    - noship_recs_uninitialized_destination # renamed xdr_uninitialized_destination_error
+    - noship_recs_unknown_namespace # renamed xdr_unknown_namespace_error
     - proxy_action
     - proxy_initiate
     - proxy_retry
@@ -330,27 +550,27 @@ service:
     - proxy_retry_q_full
     - proxy_retry_same_dest
     - proxy_unproxy
-    - query_abort        # moved to NS
-    - query_agg        # moved to NS
-    - query_agg_abort     # moved to NS
-    - query_agg_avg_rec_count    # moved to NS
-    - query_agg_err     # moved to NS query_agg_error
-    - query_agg_success    # moved to NS
-    - query_avg_rec_count     # moved to NS
-    - query_fail        # moved to NS
-    - query_long_queue_full    # moved to NS
-    - query_long_reqs    # moved to NS
+    - query_abort # moved to NS
+    - query_agg # moved to NS
+    - query_agg_abort # moved to NS
+    - query_agg_avg_rec_count # moved to NS
+    - query_agg_err # moved to NS query_agg_error
+    - query_agg_success # moved to NS
+    - query_avg_rec_count # moved to NS
+    - query_fail # moved to NS
+    - query_long_queue_full # moved to NS
+    - query_long_reqs # moved to NS
     - query_long_running
-    - query_lookup_abort    # moved to NS
-    - query_lookup_avg_rec_count    # moved to NS
-    - query_lookup_err        # moved to NS query_lookup_error
-    - query_lookups    # moved to NS
-    - query_lookup_success        # moved to NS
-    - query_reqs                # moved to NS
-    - query_short_queue_full    # moved to NS
-    - query_short_reqs        # moved to NS
+    - query_lookup_abort # moved to NS
+    - query_lookup_avg_rec_count # moved to NS
+    - query_lookup_err # moved to NS query_lookup_error
+    - query_lookups # moved to NS
+    - query_lookup_success # moved to NS
+    - query_reqs # moved to NS
+    - query_short_queue_full # moved to NS
+    - query_short_reqs # moved to NS
     - query_short_running
-    - query_success        # moved to NS
+    - query_success # moved to NS
     - query_tracked
     - read_dup_prole
     - reaped_fds
@@ -382,44 +602,44 @@ service:
     - stat_cluster_key_transaction_reenqueue
     - stat_cluster_key_trans_to_proxy_retry
     - stat_deleted_set_objects
-    - stat_delete_success        # moved to NS client_delete_success
+    - stat_delete_success # moved to NS client_delete_success
     - stat_duplicate_operation
-    - stat_evicted_objects        # moved to NS evicted_objects
-    - stat_expired_objects        # moved to NS expired_objects
+    - stat_evicted_objects # moved to NS evicted_objects
+    - stat_expired_objects # moved to NS expired_objects
     - stat_ldt_proxy
     - stat_nsup_deletes_not_shipped
     - stat_evicted_set_objects
-    - stat_proxy_errs        # moved to NS client_proxy_error
+    - stat_proxy_errs # moved to NS client_proxy_error
     - stat_proxy_reqs
     - stat_proxy_reqs_xdr
-    - stat_proxy_success    # moved to NS client_proxy_complete
-    - stat_read_errs_notfound    # moved to NS client_read_not_found
-    - stat_read_errs_other        # moved to NS client_read_error
+    - stat_proxy_success # moved to NS client_proxy_complete
+    - stat_read_errs_notfound # moved to NS client_read_not_found
+    - stat_read_errs_other # moved to NS client_read_error
     - stat_read_reqs
     - stat_read_reqs_xdr
-    - stat_read_success    # moved to NS client_read_success
-    - stat_recs_inflight    # renamed xdr_ship_inflight_objects
-    - stat_recs_linkdown_processed    # renamed dlog_processed_link_down
-    - stat_recs_logged        # renamed dlog_logged
+    - stat_read_success # moved to NS client_read_success
+    - stat_recs_inflight # renamed xdr_ship_inflight_objects
+    - stat_recs_linkdown_processed # renamed dlog_processed_link_down
+    - stat_recs_logged # renamed dlog_logged
     - stat_recs_logged_master
-    - stat_recs_outstanding    # renamed xdr_ship_outstanding_objects
-    - stat_recs_relogged        # renamed dlog_relogged
-    - stat_recs_relogged_incoming    # renamed xdr_relogged_incoming
-    - stat_recs_relogged_outgoing    # renamed xdr_relogged_outgoing
-    - stat_recs_replprocessed        # renamed dlog_processed_replica
+    - stat_recs_outstanding # renamed xdr_ship_outstanding_objects
+    - stat_recs_relogged # renamed dlog_relogged
+    - stat_recs_relogged_incoming # renamed xdr_relogged_incoming
+    - stat_recs_relogged_outgoing # renamed xdr_relogged_outgoing
+    - stat_recs_replprocessed # renamed dlog_processed_replica
     - stat_recs_shipped
     - stat_recs_shipped_binlevel
-    - stat_recs_shipped_ok        # renamed xdr_ship_success
-    - stat_rw_timeout        # moved to NS client_read_timeout, client_write_timeout
+    - stat_recs_shipped_ok # renamed xdr_ship_success
+    - stat_rw_timeout # moved to NS client_read_timeout, client_write_timeout
     - stat_slow_trans_queue_batch_pop
     - stat_slow_trans_queue_pop
     - stat_slow_trans_queue_push
-    - stat_write_errs        # moved to NS client_write_error
+    - stat_write_errs # moved to NS client_write_error
     - stat_write_errs_notfound
-    - stat_write_errs_other    # moved to NS client_write_error
+    - stat_write_errs_other # moved to NS client_write_error
     - stat_write_reqs
-    - stat_write_reqs_xdr    # moved to NS  to xdr_write_success
-    - stat_write_success        # moved to NS client_write_success
+    - stat_write_reqs_xdr # moved to NS  to xdr_write_success
+    - stat_write_success # moved to NS client_write_success
     - stat_xdr_pipe_miss
     - stat_xdr_pipe_writes
     - stat_zero_bin_records
@@ -429,25 +649,25 @@ service:
     - tscan_initiate
     - tscan_pending
     - tscan_succeeded
-    - udf_bg_scans_succeeded    # moved to NS udf_bg_scan_failure
-    - udf_bg_scans_failed        # moved to NS udf_bg_scan_success
+    - udf_bg_scans_succeeded # moved to NS udf_bg_scan_failure
+    - udf_bg_scans_failed # moved to NS udf_bg_scan_success
     - udf_delete_err_others
     - udf_delete_reqs
-    - udf_delete_success    # moved to NS client_lang_delete_success
-    - udf_lua_errs        # moved to NS client_lang_error, udf_sub_udf_error
+    - udf_delete_success # moved to NS client_lang_delete_success
+    - udf_lua_errs # moved to NS client_lang_error, udf_sub_udf_error
     - udf_query_rec_reqs
     - udf_read_errs_other
     - udf_read_reqs
-    - udf_read_success        # moved to NS client_lang_read_success
+    - udf_read_success # moved to NS client_lang_read_success
     - udf_replica_writes
     - udf_scan_rec_reqs
     - udf_write_err_others
     - udf_write_reqs
-    - udf_write_success    # moved to NS client_lang_write_success
+    - udf_write_success # moved to NS client_lang_write_success
     - write_master
     - write_prole
     - xdr_deletes_canceled
-    - xdr_deletes_shipped    # renamed xdr_ship_delete_success
+    - xdr_deletes_shipped # renamed xdr_ship_delete_success
     - xdr_hotkey_fetch
     - xdr_hotkey_skip
     - xdr_queue_overflow_error
@@ -476,9 +696,8 @@ service:
 # ------------------------------------------------------------------------------
 
 # inline comments indicate moved/renamed metrics starting with ASD 3.9+
-namespace:    
-  
-  gauge:    
+namespace:
+  gauge:
     # Stats
     - age
     - appeals_rx_active
@@ -528,7 +747,7 @@ namespace:
     - non_replica_objects
     - non-expirable-objects
     - non_expirable_objects
-    - n_nodes_quiesced      # renamed nodes_quiesced
+    - n_nodes_quiesced # renamed nodes_quiesced
     - nsup-cycle-duration
     - nsup_cycle_duration
     - objects
@@ -558,23 +777,23 @@ namespace:
     - sub_objects
 
   bytes:
-    - data-used-bytes-memory    # renamed memory_used_data_bytes
+    - data-used-bytes-memory # renamed memory_used_data_bytes
     - device_total_bytes
     - device_used_bytes
     - index_flash_used_bytes
     - index_pmem_used_bytes
-    - index-used-bytes-memory    # renamed memory_used_index_bytes
+    - index-used-bytes-memory # renamed memory_used_index_bytes
     - memory_used_bytes
     - memory_used_data_bytes
     - memory_used_index_bytes
     - memory_used_sindex_bytes
     - pmem_total_bytes
     - pmem_used_bytes
-    - sindex-used-bytes-memory        # moved to NS memory_used_sindex_bytes
+    - sindex-used-bytes-memory # moved to NS memory_used_sindex_bytes
     - total-bytes-disk
     - total-bytes-memory
     - used-bytes-disk
-    - used-bytes-memory    # renamed memory_used_bytes
+    - used-bytes-memory # renamed memory_used_bytes
     - used_bytes
 
   boolean:
@@ -665,7 +884,7 @@ namespace:
     - from_proxy_batch_sub_tsvc_error
     - from_proxy_batch_sub_tsvc_timeout
     - from_proxy_write_filtered_out
-    - from_proxy_delete_error  
+    - from_proxy_delete_error
     - from_proxy_delete_filtered_out
     - from_proxy_delete_not_found
     - from_proxy_delete_success
@@ -688,7 +907,7 @@ namespace:
     - from_proxy_write_success
     - from_proxy_write_timeout
     - geo_region_query_cells
-    - geo_region_query_count            # as of 7/28/20 not yet returned from asdb.  It is renamed to ..._reqs which was deprecated
+    - geo_region_query_count # as of 7/28/20 not yet returned from asdb.  It is renamed to ..._reqs which was deprecated
     - geo_region_query_falsepos
     - geo_region_query_points
     - geo_region_query_reqs
@@ -811,27 +1030,26 @@ namespace:
     - xdr_write_timeout
 
 # ==============================================================================
-# Datacenter (XDR) specific metrics recorded per datacenter 
+# Datacenter (XDR) specific metrics recorded per datacenter
 # Note: As of server 5.0 XDR metrics have their own XDR context and all these
 # metrics are deprecated.
 # ------------------------------------------------------------------------------
 
 # inline comments indicate moved/renamed metrics starting with ASD 3.9+
 datacenter:
-  
   gauge:
     - dc_as_open_conn
     - dc_as_size
     - dc_timelag
-    - dc_err_ship_client    # renamed dc_ship_source_error
-    - dc_err_ship_server    # renamed dc_ship_destination_error
+    - dc_err_ship_client # renamed dc_ship_source_error
+    - dc_err_ship_server # renamed dc_ship_destination_error
     - dc_http_locations
     - dc_http_good_locations
-    - dc_latency_avg_ship    # renamed dc_ship_latency_avg
-    - dc_remote_ship_avg_sleep    # renamed dc_ship_idle_avg
-    - dc_open_conn                  # renamed dc_as_open_conn
-    - dc_recs_inflight        # renamed dc_ship_inflight_objects
-    - dc_size                 # renamed dc_as_size
+    - dc_latency_avg_ship # renamed dc_ship_latency_avg
+    - dc_remote_ship_avg_sleep # renamed dc_ship_idle_avg
+    - dc_open_conn # renamed dc_as_open_conn
+    - dc_recs_inflight # renamed dc_ship_inflight_objects
+    - dc_size # renamed dc_as_size
     - dc_ship_idle_avg
     - dc_ship_inflight_objects
     - dc_ship_latency_avg
@@ -839,24 +1057,23 @@ datacenter:
 
   bytes:
     - dc_ship_bytes
-    - dc_esmt_bytes_shipped    # renamed dc_ship_bytes
+    - dc_esmt_bytes_shipped # renamed dc_ship_bytes
     - esmt_bytes_put_compressed
-  
+
   operations:
     - dc_remote_ship_ok
-    - dc_rec_ship_attempts        # renamed dc_ship_attempt
-    - dc_delete_ship_attempts    # renamed dc_ship_delete_success
+    - dc_rec_ship_attempts # renamed dc_ship_attempt
+    - dc_delete_ship_attempts # renamed dc_ship_delete_success
     - dc_ship_attempt
     - dc_ship_delete_success
     - dc_ship_destination_error
     - dc_ship_source_error
     - dc_ship_success
-  
+
   percent:
     - est_ship_compression_pct
     - dc_ship_idle_avg_pct
     - dc_esmt_ship_avg_comp_pct
-
 
 # ==============================================================================
 # XDR specific metrics.  New as of server 5.0.  Some metrics are new while
@@ -864,48 +1081,43 @@ datacenter:
 # ------------------------------------------------------------------------------
 
 xdr:
-  
   gauge:
-  - compression_ratio
-  - lag
-  - latency_ms
-  - recoveries_pending
+    - compression_ratio
+    - lag
+    - latency_ms
+    - recoveries_pending
 
   operations:
-  - abandoned
-  - filtered_out
-  - hot_keys
-  - in_progress
-  - in_queue
-  - lap_us
-  - not_found
-  - recoveries
-  - retry_conn_reset
-  - retry_dest
-  - success
-  - throughput
+    - abandoned
+    - filtered_out
+    - hot_keys
+    - in_progress
+    - in_queue
+    - lap_us
+    - not_found
+    - recoveries
+    - retry_conn_reset
+    - retry_dest
+    - success
+    - throughput
 
   percent:
-  - uncompressed_pct
-
+    - uncompressed_pct
 
 # ==============================================================================
 # Bin specific metrics.  Context is different for each namespace.
 # ------------------------------------------------------------------------------
 
 bins:
-
   gauge:
     - bin_names_quota
     - bin_names
-
 
 # ==============================================================================
 # set specific metrics.  Context is different for each (namespace, set) pair.
 # ------------------------------------------------------------------------------
 
 sets:
-
   gauge:
     - objects
     - tombstones
@@ -916,13 +1128,11 @@ sets:
   bytes:
     - memory_data_bytes
 
-
 # ==============================================================================
 # sindex specific metrics.  Context is different for each (namespace, set) pair.
 # ------------------------------------------------------------------------------
 
 sindex:
-
   gauge:
     - entries
     - keys
@@ -939,7 +1149,6 @@ sindex:
     - nbtr_memory_used
     - si_accounted_memory
 
-
   operations:
     - delete_error
     - delete_success
@@ -950,6 +1159,6 @@ sindex:
     - stat_gc_time
     - write_error
     - write_success
-  
+
   percent:
     - load_pct
