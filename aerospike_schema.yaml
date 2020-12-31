@@ -89,6 +89,7 @@ latency:
     - reads_tps
     - write_tps
     - writes_master_tps
+    - batch-index_tps
     - proxy_tps
     - udf_tps
     - query_tps
